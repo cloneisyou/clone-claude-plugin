@@ -27,14 +27,14 @@ flowchart TD
     C1["Claude tries to stop"] --> C2["Stop hook blocks"]
     C2 --> C3["Clone MCP predicts the next prompt"]
     C3 --> C4{"confidence >= threshold?"}
-    C4 -->|yes| C5["Continue with predicted_response"]
+    C4 -->|yes| C5["Pass prediction payload to Claude"]
     C4 -->|no| C6["Escalate to the human"]
   end
 ```
 
 | Area | Upstream Ralph Loop | Clone Loop |
 | --- | --- | --- |
-| Next instruction | Same original prompt | Clone-predicted next prompt |
+| Next instruction | Same original prompt | Hook-mediated Clone prediction |
 | Personalization | None | User memory through `predict_next_prompt` |
 | Safety | Max iterations and completion promise | Same checks plus confidence threshold and MCP failure escalation |
 
@@ -58,11 +58,20 @@ Clone adds `/clone:loop`, `/clone:cancel-loop`, `.claude/clone-loop.local.md`,
 and Clone MCP prediction settings (`--clone-threshold`, `--clone-k`,
 `--clone-agent`).
 
+## Versions
+
+- `0.1.x` / v1: Claude-mediated MCP. The Stop hook asked Claude to call
+  `mcp__clone__predict_next_prompt`.
+- `0.2.x` / v2: hook-mediated MCP. The Stop hook calls Clone MCP directly,
+  gates only on the user-configured confidence threshold, then passes the
+  prediction payload to Claude for continuation.
+
 ## Requirements
 
 - Claude Code with plugin support.
 - `CLONE_API_TOKEN` exported in the shell that launches Claude Code.
-- Permission for `mcp__clone__predict_next_prompt`.
+- Optional Claude MCP permission for manual `mcp__clone__predict_next_prompt`
+  calls. The v2 loop path calls Clone MCP directly from the Stop hook.
 
 Runtime shell requirements differ by OS:
 
@@ -165,12 +174,14 @@ Cancel the loop:
 3. When Claude tries to stop, `hooks/stop-hook.sh` runs.
 4. The hook keeps Ralph safety checks: session isolation, corrupted-state
    cleanup, max iterations, and completion promise.
-5. If the loop continues, the hook asks Claude to call
-   `mcp__clone__predict_next_prompt` with the original prompt, iteration,
-   threshold, and `last_assistant_message`.
-6. Claude continues with `predicted_response` only when confidence clears the
-   threshold; otherwise the loop state is removed and the human is asked to
-   continue.
+5. If the loop continues, the hook calls Clone MCP `predict_next_prompt`
+   directly with the original prompt, iteration, threshold, and
+   `last_assistant_message`.
+6. If confidence clears the user-configured threshold, the hook passes the
+   prediction payload to Claude. Claude evaluates it in context and continues
+   as if the user had provided the predicted prompt.
+7. If confidence is too low or MCP fails, the loop state is removed and the
+   human is asked to continue.
 
 ## Options
 

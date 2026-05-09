@@ -18,9 +18,10 @@ The loop runs inside the current Claude Code session:
 2. Claude works on the task, modifying files.
 3. Claude tries to stop.
 4. The Stop hook intercepts the stop.
-5. Claude calls `mcp__clone__predict_next_prompt`.
-6. If Clone is confident enough, Claude treats `predicted_response` as the next user prompt.
-7. The loop continues until the completion promise is detected or the max iteration limit is reached.
+5. The Stop hook calls Clone MCP `predict_next_prompt` directly.
+6. If confidence clears the configured threshold, the hook passes the prediction payload to Claude.
+7. Claude evaluates the prediction in context and continues as if the user had provided the predicted prompt.
+8. The loop continues until the completion promise is detected or the max iteration limit is reached.
 
 The self-reference still comes from Claude seeing previous file changes and git history, just like Ralph Loop. Clone adds personalized next-prompt prediction between iterations.
 
@@ -65,7 +66,7 @@ Without a completion promise or `--max-iterations`, Clone Loop can run indefinit
 
 ### Human Escalation
 
-If Clone MCP returns low confidence, escalates, or fails, Claude should remove `.claude/clone-loop.local.md`, explain that Clone was not confident enough, and wait for human input.
+If Clone MCP returns low confidence or fails, the hook removes `.claude/clone-loop.local.md`. Claude should explain that Clone was not confident enough and wait for human input.
 
 ## Learn More
 
