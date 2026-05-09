@@ -15,6 +15,31 @@ clears the configured threshold.
 Based on Anthropic Ralph Loop, modified by Clone. The vendored upstream plugin
 is licensed under Apache-2.0; see `LICENSE`.
 
+## Why Clone Loop
+
+Ralph Loop proves the basic loop: keep Claude Code working until the task is
+actually finished. Clone Loop keeps that proven control structure, then replaces
+the static retry prompt with a personalized next-prompt prediction from Clone.
+
+| Capability | Upstream Ralph Loop | Clone Loop |
+| --- | --- | --- |
+| Loop trigger | Claude Code Stop hook | Claude Code Stop hook |
+| State file | Stores the original prompt and iteration count | Stores the original prompt, iteration count, and Clone prediction settings |
+| Next instruction | Replays the same original prompt | Predicts the user's likely next prompt with Clone MCP |
+| Personalization | None | Uses the user's Clone memory through `predict_next_prompt` |
+| Continuation rule | Continue until max iterations or completion promise | Continue only when Clone returns `auto` or confidence clears the threshold |
+| Failure mode | Stop on max iterations, completion, or invalid state | Stop on those conditions plus low confidence, escalation, or MCP failure |
+
+```text
+Upstream Ralph Loop
+Claude tries to stop -> Stop hook blocks -> same prompt is replayed
+
+Clone Loop
+Claude tries to stop -> Stop hook blocks -> Clone predicts next prompt
+                    -> confident prediction continues the loop
+                    -> low confidence escalates to the human
+```
+
 ## Upstream Ralph Loop Structure
 
 The official Ralph Loop plugin is intentionally small:
