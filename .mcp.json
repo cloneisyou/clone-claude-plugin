@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "clone": {
+      "url": "https://clone--clone.run.tools",
+      "headers": {
+        "cloneApiKey": "${CLONE_API_TOKEN}"
+      }
+    }
+  }
+}
