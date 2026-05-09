@@ -8,7 +8,7 @@ Please explain the following to the user:
 
 ## What is Clone Loop?
 
-Clone Loop is a Clone-backed version of Anthropic's Ralph Loop technique. It keeps the same in-session Stop hook mechanism, but each continuation is predicted by Clone MCP instead of simply repeating the original prompt.
+Clone Loop is a Clone-backed automation loop for Claude Code. It runs inside the current session and uses Clone MCP to predict the user's likely next prompt whenever Claude tries to stop.
 
 **Core concept:**
 
@@ -23,7 +23,7 @@ The loop runs inside the current Claude Code session:
 7. Claude evaluates the prediction in context and continues as if the user had provided the predicted prompt.
 8. The loop continues until the completion promise is detected or the max iteration limit is reached.
 
-The self-reference still comes from Claude seeing previous file changes and git history, just like Ralph Loop. Clone adds personalized next-prompt prediction between iterations.
+The self-reference comes from Claude seeing previous file changes and git history. Clone adds personalized next-prompt prediction between iterations.
 
 ## Available Commands
 
@@ -70,5 +70,4 @@ If Clone MCP returns low confidence or fails, the hook removes `.claude/clone-lo
 
 ## Learn More
 
-- Official Anthropic Ralph Loop plugin: https://claude.com/plugins/ralph-loop
-- Original Ralph technique: https://ghuntley.com/ralph/
+- Clone docs: https://clone.is/you

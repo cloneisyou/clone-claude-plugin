@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Clone Loop Setup Script.
-# Based on Anthropic's Ralph Loop plugin setup script.
 # Creates state for an in-session Clone Loop, plus Clone MCP prediction settings.
 
 set -euo pipefail
@@ -25,7 +24,7 @@ USAGE:
   /clone:loop [PROMPT...] [OPTIONS]
 
 ARGUMENTS:
-  PROMPT...    Initial Ralph task prompt.
+  PROMPT...    Initial Clone Loop task prompt.
 
 OPTIONS:
   --max-iterations <n>           Maximum iterations before auto-stop (default: unlimited)

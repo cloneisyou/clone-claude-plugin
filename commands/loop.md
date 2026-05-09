@@ -1,7 +1,7 @@
 ---
 description: "Start a Clone Loop in the current session"
 argument-hint: "PROMPT [--max-iterations N] [--completion-promise TEXT] [--clone-threshold N] [--clone-k N]"
-allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-ralph-loop.sh:*)"]
+allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-clone-loop.sh:*)"]
 hide-from-slash-command-tool: "true"
 ---
 
@@ -10,7 +10,7 @@ hide-from-slash-command-tool: "true"
 Execute the setup script to initialize the Clone Loop:
 
 ```!
-"${CLAUDE_PLUGIN_ROOT}/scripts/setup-ralph-loop.sh" $ARGUMENTS
+"${CLAUDE_PLUGIN_ROOT}/scripts/setup-clone-loop.sh" $ARGUMENTS
 ```
 
 Please work on the task.

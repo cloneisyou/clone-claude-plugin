@@ -14,27 +14,28 @@ describe('Clone Claude plugin contract', () => {
 
     assert.equal(manifest.name, 'clone')
     assert.match(manifest.description, /Clone/i)
-    assert.match(manifest.description, /Ralph/i)
+    assert.match(manifest.description, /Clone Loop/i)
   })
 
-  it('includes every upstream Ralph Loop plugin file plus Clone command aliases', () => {
-    const upstreamFiles = [
+  it('includes Clone Loop plugin files and command entries', () => {
+    const pluginFiles = [
       '.claude-plugin/plugin.json',
-      'commands/cancel-ralph.md',
+      '.mcp.json',
+      'commands/cancel-clone-loop.md',
+      'commands/cancel-loop.md',
+      'commands/clone-loop.md',
       'commands/help.md',
-      'commands/ralph-loop.md',
+      'commands/loop.md',
       'hooks/hooks.json',
       'hooks/stop-hook.sh',
       'LICENSE',
       'README.md',
-      'scripts/setup-ralph-loop.sh',
+      'scripts/setup-clone-loop.sh',
     ]
 
-    for (const file of upstreamFiles) {
+    for (const file of pluginFiles) {
       assert.equal(existsSync(new URL(file, root)), true, `${file} exists`)
     }
-    assert.equal(existsSync(new URL('commands/loop.md', root)), true)
-    assert.equal(existsSync(new URL('commands/cancel-loop.md', root)), true)
   })
 
   it('registers the remote Clone MCP server for Claude Code', () => {
@@ -55,8 +56,8 @@ describe('Clone Claude plugin contract', () => {
     assert.match(loopCommand, /# Clone Loop Command/)
   })
 
-  it('persists Clone prediction settings when starting a Ralph loop', () => {
-    const setup = read('scripts/setup-ralph-loop.sh')
+  it('persists Clone prediction settings when starting a Clone Loop', () => {
+    const setup = read('scripts/setup-clone-loop.sh')
 
     assert.match(setup, /CLONE_THRESHOLD="0\.8"/)
     assert.match(setup, /CLONE_K="1"/)

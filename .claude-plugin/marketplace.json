@@ -10,7 +10,7 @@
     {
       "name": "clone",
       "source": "./",
-      "description": "Clone Loop for Claude Code. A Ralph-style automation loop powered by Clone MCP next-prompt prediction."
+      "description": "Clone Loop for Claude Code. An automation loop powered by Clone MCP next-prompt prediction."
     }
   ]
 }

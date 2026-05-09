@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Clone Loop Stop Hook.
-# Based on Anthropic's Ralph Loop plugin stop hook.
 # Blocks session exit while a Clone Loop is active, calls Clone MCP directly,
 # and feeds Claude the prediction when it clears the user's confidence threshold.
 
@@ -119,7 +118,7 @@ async function rpc(method, params = {}, sessionId = "") {
   const init = await rpc("initialize", {
     protocolVersion: "2024-11-05",
     capabilities: {},
-    clientInfo: { name: "clone-claude-plugin", version: "0.2.0" },
+    clientInfo: { name: "clone-claude-plugin", version: "0.2.1" },
   });
 
   const args = {
@@ -310,7 +309,7 @@ Prediction status: $PREDICTED_STATUS
 Prediction id: $PREDICTION_ID
 Prediction reasoning: $PREDICTED_REASONING
 
-Keep the original Ralph completion promise rule: only output <promise>$COMPLETION_PROMISE</promise> when it is genuinely true.
+Keep the Clone Loop completion promise rule: only output <promise>$COMPLETION_PROMISE</promise> when it is genuinely true.
 EOF
 )
 

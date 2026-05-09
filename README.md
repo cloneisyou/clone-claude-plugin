@@ -1,23 +1,20 @@
 # Clone
 
-Clone is a Claude Code plugin that runs Clone Loop: a Ralph-style automation
-loop upgraded with Clone MCP next-prompt prediction.
+Clone is a Claude Code plugin that runs Clone Loop: an automation loop powered
+by Clone MCP next-prompt prediction.
 
-It vendors Anthropic's official `ralph-loop` plugin, keeps the same Stop hook
-lifecycle, and changes one key thing: instead of replaying the same prompt,
-Clone Loop asks Clone what the user would probably say next.
-
-Based on Anthropic Ralph Loop, modified by Clone. The included Ralph Loop code
-is licensed under Apache-2.0; see `LICENSE`.
+Clone Loop keeps Claude Code working inside the same session. When Claude tries
+to stop, the Stop hook calls Clone MCP, receives a predicted next prompt, and
+continues only when the prediction clears the configured confidence threshold.
 
 ## Why Clone Loop
 
-Ralph Loop keeps Claude Code working by replaying the original task whenever
-Claude tries to stop.
+Basic automation loops keep Claude Code working by replaying the original task
+whenever Claude tries to stop.
 
 ```mermaid
 flowchart TD
-  R1["User starts Ralph Loop with one task"]
+  R1["User starts a basic loop with one task"]
   R2["Claude works on files"]
   R3["Claude tries to stop"]
   R4["Stop hook blocks"]
@@ -27,8 +24,8 @@ flowchart TD
   R1 --> R2 --> R3 --> R4 --> R5 --> R6
 ```
 
-Clone Loop keeps the same loop, but replaces "repeat the same prompt" with
-"ask Clone what the user would probably say next."
+Clone Loop replaces "repeat the same prompt" with "ask Clone what the user
+would probably say next."
 
 ```mermaid
 flowchart TD
@@ -47,7 +44,7 @@ flowchart TD
   C6 -->|no| C9
 ```
 
-| Area | Ralph Loop | Clone Loop |
+| Area | Basic repeat loop | Clone Loop |
 | --- | --- | --- |
 | Next instruction | Same original prompt | Hook-mediated Clone prediction |
 | Personalization | None | User memory through `predict_next_prompt` |
@@ -55,23 +52,25 @@ flowchart TD
 
 ## Plugin Structure
 
-The original Ralph Loop files are kept for compatibility:
+The plugin is organized around Clone Loop names only:
 
 ```text
 .claude-plugin/plugin.json     Plugin metadata for Claude Code.
-commands/ralph-loop.md         Starts the loop by running the setup script.
-commands/cancel-ralph.md       Removes the loop state file.
-commands/help.md               Explains Ralph Loop to the user.
+commands/loop.md               Starts Clone Loop with /clone:loop.
+commands/clone-loop.md         Hidden explicit Clone Loop command entry.
+commands/cancel-loop.md        Cancels the active Clone Loop.
+commands/cancel-clone-loop.md  Hidden explicit cancel command entry.
+commands/help.md               Explains Clone Loop to the user.
 hooks/hooks.json               Registers a Stop hook.
-hooks/stop-hook.sh             Blocks stop and re-injects the prompt.
-scripts/setup-ralph-loop.sh    Parses options and writes loop state.
+hooks/stop-hook.sh             Blocks stop and injects Clone predictions.
+scripts/setup-clone-loop.sh    Parses options and writes loop state.
 README.md                      User documentation.
-LICENSE                        Apache-2.0 license from Ralph Loop.
+LICENSE                        Apache-2.0 license.
 ```
 
-Clone adds `/clone:loop`, `/clone:cancel-loop`, `.claude/clone-loop.local.md`,
-and Clone MCP prediction settings (`--clone-threshold`, `--clone-k`,
-`--clone-agent`).
+The primary user commands are `/clone:loop` and `/clone:cancel-loop`. Loop state
+lives in `.claude/clone-loop.local.md`, with Clone MCP prediction settings
+stored beside the original prompt.
 
 ## Versions
 
@@ -99,8 +98,8 @@ Runtime shell requirements differ by OS:
   `C:\Program Files\Git\bin\bash.exe` rather than WSL's
   `C:\Windows\System32\bash.exe`.
 
-Ralph Loop uses `jq` for JSON parsing. Clone Loop uses Node instead, so Windows
-does not need a separate `jq` install when Git Bash is present.
+Clone Loop uses Node for JSON parsing, so Windows does not need a separate
+`jq` install when Git Bash is present.
 
 > [!Important]
 > On Windows, `bash` must resolve to Git Bash. If it resolves to WSL, the hook
@@ -204,7 +203,7 @@ Cancel the loop:
 1. `/clone:loop` writes `.claude/clone-loop.local.md`.
 2. Claude works on the task.
 3. When Claude tries to stop, `hooks/stop-hook.sh` runs.
-4. The hook keeps Ralph safety checks: session isolation, corrupted-state
+4. The hook keeps Clone Loop safety checks: session isolation, corrupted-state
    cleanup, max iterations, and completion promise.
 5. If the loop continues, the hook calls Clone MCP `predict_next_prompt`
    directly with the original prompt, iteration, threshold, and
@@ -400,7 +399,9 @@ claude.exe plugin install clone@claude-plugins-official --scope user
 ```
 
 To pin a frozen version for session-only use, replace `main` with
-`clone-plugin-v0.2.0` for v2 or `clone-plugin-v0.1.0` for v1.
+`clone-plugin-v0.2.1` for the current v2 release,
+`clone-plugin-v0.2.0` for the initial v2 release, or
+`clone-plugin-v0.1.0` for v1.
 
 > [!Warning]
 > The demo API key is public and shared. Do not use it for private memory or
