@@ -268,3 +268,79 @@ Validate with Claude Code on Windows:
 ```powershell
 claude.exe plugin validate apps\claude-plugin
 ```
+
+## Installation Commands
+
+Use v2 by default. It is the hook-mediated Clone MCP version.
+
+### macOS / Linux: Session-Only
+
+```bash
+git clone https://github.com/cloneisyou/clone.git
+cd clone
+git checkout feat/claude-plugin
+export CLONE_API_TOKEN="clone_yc-reviewer-public-demo-2026"
+claude --plugin-dir ./apps/claude-plugin
+```
+
+Then run inside Claude Code:
+
+```text
+/clone:loop "Run tests and fix any failures" --max-iterations 5 --clone-threshold 0.8
+```
+
+### macOS / Linux: Local Install
+
+```bash
+git clone https://github.com/cloneisyou/clone.git
+cd clone
+git checkout feat/claude-plugin
+export CLONE_API_TOKEN="clone_yc-reviewer-public-demo-2026"
+claude plugin marketplace add . --scope user
+claude plugin install clone@clone-local --scope user
+claude
+```
+
+### Windows PowerShell: Session-Only
+
+```powershell
+git clone https://github.com/cloneisyou/clone.git
+Set-Location clone
+git checkout feat/claude-plugin
+$env:CLONE_API_TOKEN = "clone_yc-reviewer-public-demo-2026"
+claude.exe --plugin-dir .\apps\claude-plugin
+```
+
+Then run inside Claude Code:
+
+```text
+/clone:loop "Run tests and fix any failures" --max-iterations 5 --clone-threshold 0.8
+```
+
+### Windows PowerShell: Local Install
+
+```powershell
+git clone https://github.com/cloneisyou/clone.git
+Set-Location clone
+git checkout feat/claude-plugin
+$env:CLONE_API_TOKEN = "clone_yc-reviewer-public-demo-2026"
+claude.exe plugin marketplace add . --scope user
+claude.exe plugin install clone@clone-local --scope user
+claude.exe
+```
+
+### Published Plugin
+
+After Clone is published to the Claude plugin directory:
+
+```bash
+claude plugin install clone@claude-plugins-official --scope user
+```
+
+```powershell
+claude.exe plugin install clone@claude-plugins-official --scope user
+```
+
+To pin a frozen version for session-only use, replace
+`feat/claude-plugin` with `clone-plugin-v0.2.0` for v2 or
+`clone-plugin-v0.1.0` for v1.
