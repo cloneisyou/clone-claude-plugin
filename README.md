@@ -67,13 +67,20 @@ say next, then proceed as if the user had typed that prompt."
 ## Requirements
 
 - Claude Code with plugin support.
-- `bash`, `node`, `perl`, `sed`, and `awk` available to hook scripts. Upstream
-  Ralph Loop uses `jq` for JSON parsing; Clone Loop uses Node so the hook works
-  on Windows environments where Git Bash is present but `jq` is not.
 - Clone API key exported as `CLONE_API_TOKEN`. The plugin sends it to the
   Clone remote MCP endpoint as the `X-Clone-API-Key` header.
 - Permission for the Clone MCP tools used by the loop:
   - `mcp__clone__predict_next_prompt`
+
+Runtime shell requirements differ by OS:
+
+- macOS / Linux: `bash`, `node`, `perl`, `sed`, and `awk` must be on `PATH`.
+- Windows: Git for Windows is required, and `bash` should resolve to
+  `C:\Program Files\Git\bin\bash.exe` rather than WSL's
+  `C:\Windows\System32\bash.exe`.
+
+Upstream Ralph Loop uses `jq` for JSON parsing. Clone Loop uses Node instead,
+so Windows does not need a separate `jq` install when Git Bash is present.
 
 The plugin registers Clone's remote Streamable HTTP MCP endpoint through
 `.mcp.json`:
@@ -99,6 +106,66 @@ smithery mcp add clone/clone --headers '{"cloneApiKey":"your-clone-api-key"}'
 
 That path requires a Smithery namespace/API key. The plugin uses Clone's direct
 remote MCP endpoint so Claude Code can connect with only `CLONE_API_TOKEN`.
+
+## OS Setup
+
+### macOS / Linux
+
+Set the Clone API key in the shell that launches Claude Code:
+
+```bash
+export CLONE_API_TOKEN="clone_yc-reviewer-public-demo-2026"
+```
+
+Verify the local runtime tools:
+
+```bash
+command -v bash node perl sed awk
+```
+
+Validate the plugin:
+
+```bash
+claude plugin validate apps/claude-plugin
+```
+
+### Windows
+
+Use PowerShell for environment variables:
+
+```powershell
+$env:CLONE_API_TOKEN = "clone_yc-reviewer-public-demo-2026"
+```
+
+Verify the local runtime tools:
+
+```powershell
+Get-Command bash
+Get-Command node
+Get-Command perl
+Get-Command sed
+Get-Command awk
+```
+
+`Get-Command bash` should point to Git Bash:
+
+```text
+C:\Program Files\Git\bin\bash.exe
+```
+
+If it points to `C:\Windows\System32\bash.exe`, Claude Code may try to use WSL.
+Fix `PATH` so Git Bash comes first, or edit the installed plugin cache
+`hooks/hooks.json` to use Git Bash explicitly:
+
+```json
+"command": "\"C:/Program Files/Git/bin/bash.exe\" \"${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.sh\""
+```
+
+Validate the plugin:
+
+```powershell
+claude.exe plugin validate apps\claude-plugin
+```
 
 ## Usage
 
@@ -170,42 +237,59 @@ Success criteria:
 
 Always set a reasonable `--max-iterations` for new tasks.
 
-## Windows Compatibility
-
-The hook command follows the upstream Ralph Loop plugin and uses `bash`.
-On Windows, ensure `bash` resolves to Git Bash rather than a broken WSL
-installation. If needed, edit `hooks/hooks.json` in the installed plugin cache
-to use:
-
-```json
-"command": "\"C:/Program Files/Git/bin/bash.exe\" \"${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.sh\""
-```
-
 ## Development
 
-Run the plugin contract tests:
+Run the plugin contract tests on macOS / Linux:
 
 ```bash
 cd apps/claude-plugin
 npm test
 ```
 
-Check the published Smithery MCP endpoint:
+Run the plugin contract tests on Windows PowerShell:
+
+```powershell
+Set-Location apps\claude-plugin
+npm test
+```
+
+Check the live remote Clone MCP endpoint on macOS / Linux:
 
 ```bash
 cd apps/claude-plugin
 npm run test:mcp
 ```
 
-To run the live `predict_next_prompt` call, export a real Clone API key first:
+Check the live remote Clone MCP endpoint on Windows PowerShell:
+
+```powershell
+Set-Location apps\claude-plugin
+npm run test:mcp
+```
+
+`npm run test:mcp` uses the public YC reviewer demo key by default. To test a
+different account, set `CLONE_API_TOKEN` first:
 
 ```bash
 export CLONE_API_TOKEN="clone_xxx"
 npm run test:mcp
 ```
 
-Validate with Claude Code when available:
+or on Windows:
+
+```powershell
+$env:CLONE_API_TOKEN = "clone_xxx"
+npm run test:mcp
+```
+
+Validate with Claude Code on macOS / Linux:
 
 ```bash
 claude plugin validate apps/claude-plugin
+```
+
+Validate with Claude Code on Windows:
+
+```powershell
+claude.exe plugin validate apps\claude-plugin
 ```
