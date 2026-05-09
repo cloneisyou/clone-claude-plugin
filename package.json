@@ -4,6 +4,6 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/plugin-contract.test.mjs",
-    "test:mcp": "node --test tests/smithery-mcp-connect.test.mjs"
+    "test:mcp": "node --test tests/remote-mcp-connect.test.mjs"
   }
 }
