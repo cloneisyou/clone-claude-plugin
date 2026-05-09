@@ -75,6 +75,10 @@ and Clone MCP prediction settings (`--clone-threshold`, `--clone-k`,
 
 ## Versions
 
+> [!Tip]
+> Use `0.2.x` unless you specifically need to compare against v1. v2 is the
+> hook-mediated path that calls Clone MCP directly from the Stop hook.
+
 - `0.1.x` / v1: Claude-mediated MCP. The Stop hook asked Claude to call
   `mcp__clone__predict_next_prompt`.
 - `0.2.x` / v2: hook-mediated MCP. The Stop hook calls Clone MCP directly,
@@ -97,6 +101,11 @@ Runtime shell requirements differ by OS:
 
 Ralph Loop uses `jq` for JSON parsing. Clone Loop uses Node instead, so Windows
 does not need a separate `jq` install when Git Bash is present.
+
+> [!Important]
+> On Windows, `bash` must resolve to Git Bash. If it resolves to WSL, the hook
+> may not see the same filesystem paths or Node installation that Claude Code
+> sees.
 
 Clone's direct remote MCP endpoint is registered in `.mcp.json`:
 
@@ -123,6 +132,10 @@ The plugin defaults to the direct endpoint so Claude Code only needs
 `CLONE_API_TOKEN`.
 
 ## OS Setup
+
+> [!Note]
+> These commands only prepare the environment and validate the plugin. For
+> installation commands, jump to [Installation Commands](#installation-commands).
 
 ### macOS / Linux
 
@@ -159,6 +172,10 @@ Fix `PATH` so Git Bash comes first, or edit the installed plugin cache
 ```
 
 ## Usage
+
+> [!Tip]
+> Start with a small `--max-iterations` value while testing the loop. Increase
+> it once the prompt and completion promise are behaving well.
 
 Start Clone Loop:
 
@@ -228,6 +245,10 @@ Always set a reasonable `--max-iterations`.
 
 ## Development
 
+> [!Important]
+> `npm run test:mcp` calls the live Clone MCP endpoint. The test uses the public
+> YC reviewer demo key by default, so do not record sensitive data there.
+
 macOS / Linux:
 
 ```bash
@@ -244,8 +265,7 @@ npm test
 npm run test:mcp
 ```
 
-`npm run test:mcp` calls the live Clone MCP endpoint and uses the public YC
-reviewer demo key by default. To test another account:
+To test another account:
 
 ```bash
 export CLONE_API_TOKEN="clone_xxx"
@@ -271,7 +291,13 @@ claude.exe plugin validate apps\claude-plugin
 
 ## Installation Commands
 
-Use v2 by default. It is the hook-mediated Clone MCP version.
+> [!Tip]
+> Use v2 by default. It is the hook-mediated Clone MCP version.
+
+> [!Note]
+> Session-only mode is best for trying the plugin without changing your Claude
+> Code plugin configuration. Local install is better when you want `/clone:loop`
+> available in future sessions.
 
 ### macOS / Linux: Session-Only
 
@@ -331,6 +357,9 @@ claude.exe
 
 ### Published Plugin
 
+> [!Note]
+> These commands apply after Clone is published to a Claude plugin marketplace.
+
 After Clone is published to the Claude plugin directory:
 
 ```bash
@@ -344,3 +373,7 @@ claude.exe plugin install clone@claude-plugins-official --scope user
 To pin a frozen version for session-only use, replace
 `feat/claude-plugin` with `clone-plugin-v0.2.0` for v2 or
 `clone-plugin-v0.1.0` for v1.
+
+> [!Warning]
+> The demo API key is public and shared. Do not use it for private memory or
+> sensitive project data.
