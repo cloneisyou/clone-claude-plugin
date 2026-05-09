@@ -1,0 +1,8 @@
+{
+  "name": "clone-claude-plugin-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/plugin-contract.test.mjs"
+  }
+}
