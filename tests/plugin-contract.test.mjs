@@ -37,12 +37,12 @@ describe('Clone Claude plugin contract', () => {
     assert.equal(existsSync(new URL('commands/cancel-loop.md', root)), true)
   })
 
-  it('registers the Smithery-hosted Clone MCP server for Claude Code', () => {
+  it('registers the remote Clone MCP server for Claude Code', () => {
     const mcp = JSON.parse(read('.mcp.json'))
 
-    assert.equal(mcp.mcpServers.clone.url, 'https://clone--clone.run.tools')
+    assert.equal(mcp.mcpServers.clone.url, 'https://api.clone.is/mcp')
     assert.equal(
-      mcp.mcpServers.clone.headers.cloneApiKey,
+      mcp.mcpServers.clone.headers['X-Clone-API-Key'],
       '${CLONE_API_TOKEN}',
     )
   })
