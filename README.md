@@ -52,8 +52,8 @@ the continuation prompt source:
 - Legacy aliases: `/clone:ralph-loop` and `/clone:cancel-ralph` remain for
   Ralph-compatible command coverage.
 - State file: `.claude/clone-loop.local.md`.
-- MCP server: `clone`, connected through the Smithery-hosted endpoint
-  `https://clone--clone.run.tools`.
+- MCP server: `clone`, connected through Clone's remote MCP endpoint
+  `https://api.clone.is/mcp`.
 - Prediction tool: `mcp__clone__predict_next_prompt`.
 - Continuation rule: use `predicted_response` only when Clone returns `auto` or
   confidence is greater than or equal to `--clone-threshold`.
@@ -67,27 +67,38 @@ say next, then proceed as if the user had typed that prompt."
 ## Requirements
 
 - Claude Code with plugin support.
-- `bash`, `jq`, `perl`, `sed`, and `awk` available to hook scripts. This
-  matches the upstream Ralph Loop hook assumptions.
+- `bash`, `node`, `perl`, `sed`, and `awk` available to hook scripts. Upstream
+  Ralph Loop uses `jq` for JSON parsing; Clone Loop uses Node so the hook works
+  on Windows environments where Git Bash is present but `jq` is not.
 - Clone API key exported as `CLONE_API_TOKEN`. The plugin sends it to the
-  Smithery-hosted Clone MCP server as the required `cloneApiKey` header.
+  Clone remote MCP endpoint as the `X-Clone-API-Key` header.
 - Permission for the Clone MCP tools used by the loop:
   - `mcp__clone__predict_next_prompt`
 
-The plugin registers the Smithery-hosted Clone MCP through `.mcp.json`:
+The plugin registers Clone's remote Streamable HTTP MCP endpoint through
+`.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "clone": {
-      "url": "https://clone--clone.run.tools",
+      "url": "https://api.clone.is/mcp",
       "headers": {
-        "cloneApiKey": "${CLONE_API_TOKEN}"
+        "X-Clone-API-Key": "${CLONE_API_TOKEN}"
       }
     }
   }
 }
 ```
+
+Smithery can also manage the same server as a hosted connection:
+
+```bash
+smithery mcp add clone/clone --headers '{"cloneApiKey":"your-clone-api-key"}'
+```
+
+That path requires a Smithery namespace/API key. The plugin uses Clone's direct
+remote MCP endpoint so Claude Code can connect with only `CLONE_API_TOKEN`.
 
 ## Usage
 
