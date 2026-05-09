@@ -67,14 +67,17 @@ describe('Clone Claude plugin contract', () => {
     assert.match(setup, /clone_agent: "\$CLONE_AGENT"/)
   })
 
-  it('asks Claude to call Clone MCP and use confident predictions as the next prompt', () => {
+  it('calls Clone MCP from the hook and passes confident predictions to Claude', () => {
     const hook = read('hooks/stop-hook.sh')
 
-    assert.match(hook, /mcp__clone__predict_next_prompt/)
+    assert.match(hook, /clone_predict_next_prompt/)
+    assert.match(hook, /tools\/call/)
+    assert.match(hook, /predict_next_prompt/)
     assert.match(hook, /last_assistant_message/)
     assert.match(hook, /predicted_response/)
     assert.match(hook, /confidence/)
-    assert.match(hook, /clone_threshold/)
+    assert.match(hook, /confidence_clears_threshold/)
+    assert.match(hook, /user-configured confidence threshold/)
     assert.match(hook, /human escalation/)
     assert.doesNotMatch(hook, /mcp__clone__submit_feedback/)
   })

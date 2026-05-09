@@ -1,7 +1,7 @@
 {
   "name": "clone",
-  "version": "0.1.0",
-  "description": "Clone-backed Ralph Loop for Claude Code. Runs iterative Ralph-style development loops and asks Clone MCP to predict the next user prompt each iteration.",
+  "version": "0.2.0",
+  "description": "Clone-backed Ralph Loop for Claude Code. Runs iterative Ralph-style development loops and calls Clone MCP from the stop hook to predict the next user prompt each iteration.",
   "author": {
     "name": "Clone",
     "email": "hello@clone.is"
