@@ -295,16 +295,49 @@ claude.exe plugin validate apps\claude-plugin
 > Use v2 by default. It is the hook-mediated Clone MCP version.
 
 > [!Note]
-> Session-only mode is best for trying the plugin without changing your Claude
-> Code plugin configuration. Local install is better when you want `/clone:loop`
-> available in future sessions.
+> This repository is a monorepo. Marketplace installation uses `--sparse` so
+> Claude Code only checks out `.claude-plugin` and `apps/claude-plugin`.
+
+### macOS / Linux: GitHub Marketplace Install
+
+```bash
+export CLONE_API_TOKEN="clone_yc-reviewer-public-demo-2026"
+claude plugin marketplace add cloneisyou/clone@main --sparse .claude-plugin apps/claude-plugin
+claude plugin install clone@clone --scope user
+claude
+```
+
+Then run inside Claude Code:
+
+```text
+/clone:loop "Run tests and fix any failures" --max-iterations 5 --clone-threshold 0.8
+```
+
+### Windows PowerShell: GitHub Marketplace Install
+
+```powershell
+$env:CLONE_API_TOKEN = "clone_yc-reviewer-public-demo-2026"
+claude.exe plugin marketplace add cloneisyou/clone@main --sparse .claude-plugin apps/claude-plugin
+claude.exe plugin install clone@clone --scope user
+claude.exe
+```
+
+Then run inside Claude Code:
+
+```text
+/clone:loop "Run tests and fix any failures" --max-iterations 5 --clone-threshold 0.8
+```
+
+> [!Note]
+> Session-only mode is best for trying a local checkout without changing your
+> Claude Code plugin configuration.
 
 ### macOS / Linux: Session-Only
 
 ```bash
 git clone https://github.com/cloneisyou/clone.git
 cd clone
-git checkout feat/claude-plugin
+git checkout main
 export CLONE_API_TOKEN="clone_yc-reviewer-public-demo-2026"
 claude --plugin-dir ./apps/claude-plugin
 ```
@@ -315,24 +348,12 @@ Then run inside Claude Code:
 /clone:loop "Run tests and fix any failures" --max-iterations 5 --clone-threshold 0.8
 ```
 
-### macOS / Linux: Local Install
-
-```bash
-git clone https://github.com/cloneisyou/clone.git
-cd clone
-git checkout feat/claude-plugin
-export CLONE_API_TOKEN="clone_yc-reviewer-public-demo-2026"
-claude plugin marketplace add . --scope user
-claude plugin install clone@clone-local --scope user
-claude
-```
-
 ### Windows PowerShell: Session-Only
 
 ```powershell
 git clone https://github.com/cloneisyou/clone.git
 Set-Location clone
-git checkout feat/claude-plugin
+git checkout main
 $env:CLONE_API_TOKEN = "clone_yc-reviewer-public-demo-2026"
 claude.exe --plugin-dir .\apps\claude-plugin
 ```
@@ -343,16 +364,26 @@ Then run inside Claude Code:
 /clone:loop "Run tests and fix any failures" --max-iterations 5 --clone-threshold 0.8
 ```
 
-### Windows PowerShell: Local Install
+### Local Checkout Marketplace Install
+
+Use this only while developing the plugin from a local clone.
+
+```bash
+git clone https://github.com/cloneisyou/clone.git
+cd clone
+git checkout main
+export CLONE_API_TOKEN="clone_yc-reviewer-public-demo-2026"
+claude plugin marketplace add . --scope user
+claude plugin install clone@clone --scope user
+```
 
 ```powershell
 git clone https://github.com/cloneisyou/clone.git
 Set-Location clone
-git checkout feat/claude-plugin
+git checkout main
 $env:CLONE_API_TOKEN = "clone_yc-reviewer-public-demo-2026"
 claude.exe plugin marketplace add . --scope user
-claude.exe plugin install clone@clone-local --scope user
-claude.exe
+claude.exe plugin install clone@clone --scope user
 ```
 
 ### Published Plugin
@@ -370,9 +401,8 @@ claude plugin install clone@claude-plugins-official --scope user
 claude.exe plugin install clone@claude-plugins-official --scope user
 ```
 
-To pin a frozen version for session-only use, replace
-`feat/claude-plugin` with `clone-plugin-v0.2.0` for v2 or
-`clone-plugin-v0.1.0` for v1.
+To pin a frozen version for session-only use, replace `main` with
+`clone-plugin-v0.2.0` for v2 or `clone-plugin-v0.1.0` for v1.
 
 > [!Warning]
 > The demo API key is public and shared. Do not use it for private memory or
