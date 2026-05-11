@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -8,14 +8,7 @@ import { afterEach, beforeEach, describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const pluginRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
-const hookPath = join(pluginRoot, 'hooks', 'stop-hook.sh')
-const gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
-const bashCommand = existsSync(gitBash) ? gitBash : 'bash'
-
-function toBashPath(path) {
-  const prefix = existsSync(gitBash) ? '/' : '/mnt/'
-  return path.replace(/^([A-Za-z]):\\/, (_, drive) => `${prefix}${drive.toLowerCase()}/`).replaceAll('\\', '/')
-}
+const launcherPath = join(pluginRoot, 'scripts', 'run-plugin-bash.mjs')
 
 function writeState(workdir, overrides = {}) {
   const state = {
@@ -49,10 +42,11 @@ ${state.prompt}
 
 function runHook(workdir, endpoint) {
   return new Promise((resolveRun) => {
-    const child = spawn(bashCommand, [toBashPath(hookPath)], {
+    const child = spawn(process.execPath, [launcherPath, 'hooks/stop-hook.sh'], {
       cwd: workdir,
       env: {
         ...process.env,
+        CLAUDE_PLUGIN_ROOT: pluginRoot,
         CLONE_MCP_URL: endpoint,
         CLONE_API_TOKEN: 'test-token',
       },

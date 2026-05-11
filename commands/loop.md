@@ -1,16 +1,16 @@
 ---
 description: "Start a Clone Loop in the current session"
 argument-hint: "PROMPT [--max-iterations N] [--completion-promise TEXT] [--clone-threshold N] [--clone-k N]"
-allowed-tools: Bash(bash *setup-clone-loop.sh*)
+allowed-tools: Bash(node *run-plugin-bash.mjs*)
 hide-from-slash-command-tool: "true"
 ---
 
 # Clone Loop Command
 
-Use the Bash tool to execute the setup script and initialize the Clone Loop:
+Use the Bash tool to execute the setup script through the plugin launcher and initialize the Clone Loop:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/setup-clone-loop.sh" $ARGUMENTS
+node "${CLAUDE_PLUGIN_ROOT}/scripts/run-plugin-bash.mjs" scripts/setup-clone-loop.sh $ARGUMENTS
 ```
 
 If setup succeeds, please work on the task.

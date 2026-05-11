@@ -117,17 +117,18 @@ stored beside the original prompt.
 Runtime shell requirements differ by OS:
 
 - macOS / Linux: `bash`, `node`, `perl`, `sed`, and `awk` must be on `PATH`.
-- Windows: Git for Windows is required, and `bash` should resolve to
-  `C:\Program Files\Git\bin\bash.exe` rather than WSL's
-  `C:\Windows\System32\bash.exe`.
+- Windows: Git for Windows and Node are required. Clone uses a Node launcher
+  to call Git Bash directly, so `bash` may resolve to WSL as long as Git Bash
+  is installed at `C:\Program Files\Git\bin\bash.exe` or `CLONE_BASH_PATH`
+  points to the Git Bash executable.
 
 Clone Loop uses Node for JSON parsing, so Windows does not need a separate
 `jq` install when Git Bash is present.
 
 > [!IMPORTANT]
-> On Windows, `bash` must resolve to Git Bash. If it resolves to WSL, the hook
-> may not see the same filesystem paths or Node installation that Claude Code
-> sees.
+> On Windows, do not run Clone Loop through WSL Bash. If Git for Windows is not
+> installed in the standard location, set `CLONE_BASH_PATH` to the Git Bash
+> executable before launching Claude Code.
 
 Clone's direct remote MCP endpoint is registered in `.mcp.json`:
 
@@ -171,26 +172,18 @@ claude plugin validate .
 
 ```powershell
 $env:CLONE_API_TOKEN = "clone_yc-reviewer-public-demo-2026"
-Get-Command bash
 Get-Command node
 Get-Command perl
 Get-Command sed
 Get-Command awk
+Test-Path "C:\Program Files\Git\bin\bash.exe"
 claude.exe plugin validate .
 ```
 
-`Get-Command bash` should point to Git Bash:
+If Git for Windows is installed somewhere else, set `CLONE_BASH_PATH`:
 
-```text
-C:\Program Files\Git\bin\bash.exe
-```
-
-If it points to `C:\Windows\System32\bash.exe`, Claude Code may try to use WSL.
-Fix `PATH` so Git Bash comes first, or edit the installed plugin cache
-`hooks/hooks.json` to use Git Bash explicitly:
-
-```json
-"command": "\"C:/Program Files/Git/bin/bash.exe\" \"${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.sh\""
+```powershell
+$env:CLONE_BASH_PATH = "D:\Apps\Git\bin\bash.exe"
 ```
 
 ## Usage
@@ -452,7 +445,8 @@ claude.exe plugin install clone@claude-plugins-official --scope user
 ```
 
 To pin a frozen version for session-only use, replace `main` with
-`clone-plugin-v0.2.2` for the current v2 release,
+`clone-plugin-v0.2.3` for the current v2 release,
+`clone-plugin-v0.2.2` for the Windows launcher release,
 `clone-plugin-v0.2.1` for the previous v2 release,
 `clone-plugin-v0.2.0` for the initial v2 release, or
 `clone-plugin-v0.1.0` for v1.

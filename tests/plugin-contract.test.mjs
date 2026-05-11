@@ -28,6 +28,7 @@ describe('Clone Claude plugin contract', () => {
       'hooks/stop-hook.sh',
       'LICENSE',
       'README.md',
+      'scripts/run-plugin-bash.mjs',
       'scripts/setup-clone-loop.sh',
     ]
 
@@ -62,16 +63,26 @@ describe('Clone Claude plugin contract', () => {
     assert.match(loopCommand, /# Clone Loop Command/)
   })
 
-  it('runs Clone Loop setup through the Bash tool instead of shell pre-execution', () => {
+  it('runs Clone Loop setup through the Node bash launcher instead of shell pre-execution', () => {
     const loopCommand = read('commands/loop.md')
 
-    assert.match(loopCommand, /allowed-tools: Bash\(bash \*setup-clone-loop\.sh\*\)/)
+    assert.match(loopCommand, /allowed-tools: Bash\(node \*run-plugin-bash\.mjs\*\)/)
     assert.match(
       loopCommand,
-      /bash "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/setup-clone-loop\.sh" \$ARGUMENTS/,
+      /node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/run-plugin-bash\.mjs" scripts\/setup-clone-loop\.sh \$ARGUMENTS/,
     )
     assert.match(loopCommand, /Use the Bash tool/)
     assert.doesNotMatch(loopCommand, /```!/)
+  })
+
+  it('runs the Stop hook through the Node bash launcher', () => {
+    const hooks = JSON.parse(read('hooks/hooks.json'))
+    const command = hooks.hooks.Stop[0].hooks[0].command
+
+    assert.equal(
+      command,
+      'node "${CLAUDE_PLUGIN_ROOT}/scripts/run-plugin-bash.mjs" hooks/stop-hook.sh',
+    )
   })
 
   it('persists Clone prediction settings when starting a Clone Loop', () => {

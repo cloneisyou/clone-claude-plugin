@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/plugin-contract.test.mjs tests/stop-hook-v2.test.mjs",
+    "test": "node --test tests/plugin-contract.test.mjs tests/run-plugin-bash.test.mjs tests/stop-hook-v2.test.mjs",
     "test:mcp": "node --test tests/remote-mcp-connect.test.mjs"
   }
 }
