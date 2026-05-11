@@ -7,6 +7,28 @@ Clone Loop keeps Claude Code working inside the same session. When Claude tries
 to stop, the Stop hook calls Clone MCP, receives a predicted next prompt, and
 continues only when the prediction clears the configured confidence threshold.
 
+## Quick Install
+
+Install from your shell:
+
+```bash
+claude plugin marketplace add cloneisyou/clone-claude-plugin@main
+claude plugin install clone@clone-labs --scope user
+```
+
+Or install from inside Claude Code:
+
+```text
+/plugin marketplace add cloneisyou/clone-claude-plugin@main
+/plugin install clone@clone-labs
+```
+
+Then start a loop:
+
+```text
+/clone:loop "Run tests and fix any failures" --max-iterations 5 --clone-threshold 0.8
+```
+
 ## Ralph Loop vs Clone Loop
 
 > [!TIP]
