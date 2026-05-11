@@ -7,48 +7,73 @@ Clone Loop keeps Claude Code working inside the same session. When Claude tries
 to stop, the Stop hook calls Clone MCP, receives a predicted next prompt, and
 continues only when the prediction clears the configured confidence threshold.
 
-## Why Clone Loop
+## Ralph Loop vs Clone Loop
 
-Basic automation loops keep Claude Code working by replaying the original task
-whenever Claude tries to stop.
+> [!TIP]
+> Read the difference as **replay vs predict**. Ralph Loop keeps the session
+> alive by replaying the original prompt. Clone Loop keeps the same hook shape,
+> but asks Clone what the user would probably say next.
 
-```mermaid
-flowchart TD
-  R1["User starts a basic loop with one task"]
-  R2["Claude works on files"]
-  R3["Claude tries to stop"]
-  R4["Stop hook blocks"]
-  R5["Same original prompt is replayed"]
-  R6["Claude continues in the same session"]
-
-  R1 --> R2 --> R3 --> R4 --> R5 --> R6
-```
-
-Clone Loop replaces "repeat the same prompt" with "ask Clone what the user
-would probably say next."
+Ralph Loop is the baseline repeat loop: useful when the original instruction
+should simply be retried, but limited when the session needs a more specific
+next nudge. Clone Loop replaces that repeated prompt with a confidence-gated
+Clone MCP prediction.
 
 ```mermaid
-flowchart TD
-  C1["User starts Clone Loop with one task"]
-  C2["Claude works on files"]
-  C3["Claude tries to stop"]
-  C4["Stop hook blocks"]
-  C5["Hook calls Clone MCP predict_next_prompt"]
-  C6{"confidence >= user threshold?"}
-  C7["Pass prediction payload to Claude"]
-  C8["Claude evaluates it in context and continues"]
-  C9["Escalate to the human"]
+flowchart LR
+  subgraph RALPH["Ralph Loop: replay the original prompt"]
+    direction TB
+    R1["User starts one task"]
+    R2["Claude works on files"]
+    R3["Claude tries to stop"]
+    R4["Stop hook blocks"]
+    R5["Replay the same prompt"]
+    R6["Claude continues"]
+    R1 --> R2 --> R3 --> R4 --> R5 --> R6
+    R6 -. "next stop repeats the same text" .-> R3
+  end
 
-  C1 --> C2 --> C3 --> C4 --> C5 --> C6
-  C6 -->|yes| C7 --> C8
-  C6 -->|no| C9
+  subgraph CLONE["Clone Loop: predict the next user prompt"]
+    direction TB
+    C1["User starts one task"]
+    C2["Claude works on files"]
+    C3["Claude tries to stop"]
+    C4["Stop hook blocks"]
+    C5["Call Clone MCP predict_next_prompt"]
+    C6{"Confidence clears threshold?"}
+    C7["Pass prediction payload to Claude"]
+    C8["Claude evaluates in session context"]
+    C9["Escalate to the human"]
+    C1 --> C2 --> C3 --> C4 --> C5 --> C6
+    C6 -->|yes| C7 --> C8
+    C8 -. "next stop asks Clone again" .-> C3
+    C6 -->|no| C9
+  end
+
+  R1 ~~~ C1
+
+  classDef ralph fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#111827;
+  classDef clone fill:#ecfdf5,stroke:#059669,stroke-width:2px,color:#064e3b;
+  classDef decision fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a;
+  classDef escalation fill:#fef2f2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d;
+  class R1,R2,R3,R4,R5,R6 ralph;
+  class C1,C2,C3,C4,C5,C7,C8 clone;
+  class C6 decision;
+  class C9 escalation;
 ```
 
-| Area | Basic repeat loop | Clone Loop |
+> [!IMPORTANT]
+> Clone Loop does not blindly continue on any generated text. The Stop hook
+> only passes a Clone prediction to Claude when confidence clears the configured
+> threshold; otherwise it removes loop state and asks for human input.
+
+| Question | Ralph Loop | Clone Loop |
 | --- | --- | --- |
-| Next instruction | Same original prompt | Hook-mediated Clone prediction |
-| Personalization | None | User memory through `predict_next_prompt` |
-| Safety | Max iterations and completion promise | Same checks plus confidence threshold and MCP failure escalation |
+| What happens after stop? | Replays the original prompt. | Calls Clone MCP for a predicted next prompt. |
+| Best fit | Simple retry loops where the same instruction remains valid. | Iterative work where the next useful nudge may change. |
+| Personalization | None. | Uses Clone's prediction path through `predict_next_prompt`. |
+| Safety boundary | Max iterations and completion promise. | Same checks plus confidence threshold and MCP failure escalation. |
+| Failure mode | Can keep pushing stale instructions. | Stops when Clone is not confident enough. |
 
 ## Plugin Structure
 
@@ -74,7 +99,7 @@ stored beside the original prompt.
 
 ## Versions
 
-> [!Tip]
+> [!TIP]
 > Use `0.2.x` unless you specifically need to compare against v1. v2 is the
 > hook-mediated path that calls Clone MCP directly from the Stop hook.
 
@@ -101,7 +126,7 @@ Runtime shell requirements differ by OS:
 Clone Loop uses Node for JSON parsing, so Windows does not need a separate
 `jq` install when Git Bash is present.
 
-> [!Important]
+> [!IMPORTANT]
 > On Windows, `bash` must resolve to Git Bash. If it resolves to WSL, the hook
 > may not see the same filesystem paths or Node installation that Claude Code
 > sees.
@@ -132,7 +157,7 @@ The plugin defaults to the direct endpoint so Claude Code only needs
 
 ## OS Setup
 
-> [!Note]
+> [!NOTE]
 > These commands only prepare the environment and validate the plugin. For
 > installation commands, jump to [Installation Commands](#installation-commands).
 
@@ -172,7 +197,7 @@ Fix `PATH` so Git Bash comes first, or edit the installed plugin cache
 
 ## Usage
 
-> [!Tip]
+> [!TIP]
 > Start with a small `--max-iterations` value while testing the loop. Increase
 > it once the prompt and completion promise are behaving well.
 
@@ -244,7 +269,7 @@ Always set a reasonable `--max-iterations`.
 
 ## Development
 
-> [!Important]
+> [!IMPORTANT]
 > `npm run test:mcp` calls the live Clone MCP endpoint. The test uses the public
 > YC reviewer demo key by default, so do not record sensitive data there.
 
@@ -288,10 +313,10 @@ claude.exe plugin validate .
 
 ## Installation Commands
 
-> [!Tip]
+> [!TIP]
 > Use v2 by default. It is the hook-mediated Clone MCP version.
 
-> [!Note]
+> [!NOTE]
 > This repository contains only the Clone Claude Code plugin. The main Clone
 > monorepo consumes it as a git submodule.
 
@@ -325,7 +350,7 @@ Then run inside Claude Code:
 /clone:loop "Run tests and fix any failures" --max-iterations 5 --clone-threshold 0.8
 ```
 
-> [!Note]
+> [!NOTE]
 > Session-only mode is best for trying a local checkout without changing your
 > Claude Code plugin configuration.
 
@@ -385,7 +410,7 @@ claude.exe plugin install clone@clone-labs --scope user
 
 ### Published Plugin
 
-> [!Note]
+> [!NOTE]
 > These commands apply after Clone is published to a Claude plugin marketplace.
 
 After Clone is published to the Claude plugin directory:
@@ -403,6 +428,6 @@ To pin a frozen version for session-only use, replace `main` with
 `clone-plugin-v0.2.0` for the initial v2 release, or
 `clone-plugin-v0.1.0` for v1.
 
-> [!Warning]
+> [!WARNING]
 > The demo API key is public and shared. Do not use it for private memory or
 > sensitive project data.
