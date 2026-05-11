@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const pluginRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
-const launcherPath = join(pluginRoot, 'scripts', 'run-plugin-bash.mjs')
+const hookPath = join(pluginRoot, 'hooks', 'stop-hook.mjs')
 
 function writeState(workdir, overrides = {}) {
   const state = {
@@ -22,6 +22,10 @@ function writeState(workdir, overrides = {}) {
     prompt: 'Fix the bug and run tests.',
     ...overrides,
   }
+  const completionPromise =
+    state.completion_promise == null
+      ? 'null'
+      : `"${String(state.completion_promise).replace(/"/g, '\\"')}"`
 
   mkdirSync(join(workdir, '.claude'), { recursive: true })
   writeFileSync(
@@ -29,7 +33,7 @@ function writeState(workdir, overrides = {}) {
     `---
 iteration: ${state.iteration}
 max_iterations: ${state.max_iterations}
-completion_promise: "${state.completion_promise}"
+completion_promise: ${completionPromise}
 session_id: ${state.session_id}
 clone_threshold: ${state.clone_threshold}
 clone_k: ${state.clone_k}
@@ -53,7 +57,7 @@ function runHook(workdir, endpoint, options = {}) {
       delete env.CLONE_API_TOKEN
     }
 
-    const child = spawn(process.execPath, [launcherPath, 'hooks/stop-hook.sh'], {
+    const child = spawn(process.execPath, [hookPath], {
       cwd: workdir,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -266,6 +270,36 @@ describe('Clone Loop v2 stop hook', () => {
         )
         assert.equal(calls[0].headers['x-clone-api-key'], 'clone_yc-reviewer-public-demo-2026')
         assert.equal(calls[1].headers['x-clone-api-key'], 'clone_yc-reviewer-public-demo-2026')
+      },
+    )
+  })
+
+  it('does not render a null completion promise as a promise rule', async () => {
+    writeState(workdir, { completion_promise: null })
+
+    await withMcpServer(
+      {
+        id: 'prediction-4',
+        status: 'auto',
+        threshold: 0.8,
+        predicted_response: 'Run one more check.',
+        confidence: 0.9,
+        reasoning: 'The user usually verifies before completion.',
+        candidates: [],
+        k: 1,
+        model: 'test-model',
+        latency_ms: 8,
+      },
+      async (endpoint) => {
+        const result = await runHook(workdir, endpoint)
+
+        assert.equal(
+          result.status,
+          0,
+          JSON.stringify({ stdout: result.stdout, stderr: result.stderr }, null, 2),
+        )
+        assert.doesNotMatch(result.stdout, /<promise>null<\/promise>/)
+        assert.match(result.stdout, /No completion promise is set for this Clone Loop/)
       },
     )
   })

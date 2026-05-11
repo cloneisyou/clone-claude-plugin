@@ -7,18 +7,17 @@ import { describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const pluginRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
-const runnerPath = join(pluginRoot, 'scripts', 'run-plugin-bash.mjs')
+const setupPath = join(pluginRoot, 'scripts', 'setup-clone-loop.mjs')
 
-describe('plugin bash launcher', () => {
-  it('runs setup scripts from Windows-safe plugin paths', () => {
-    const workdir = mkdtempSync(join(tmpdir(), 'clone-loop-launcher-'))
+describe('Clone Loop setup script', () => {
+  it('runs with Node only and writes loop state', () => {
+    const workdir = mkdtempSync(join(tmpdir(), 'clone-loop-setup-'))
 
     try {
       const result = spawnSync(
         process.execPath,
         [
-          runnerPath,
-          'scripts/setup-clone-loop.sh',
+          setupPath,
           'launcher smoke test',
           '--max-iterations',
           '1',

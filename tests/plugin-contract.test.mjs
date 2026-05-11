@@ -25,15 +25,22 @@ describe('Clone Claude plugin contract', () => {
       'commands/help.md',
       'commands/loop.md',
       'hooks/hooks.json',
-      'hooks/stop-hook.sh',
+      'hooks/stop-hook.mjs',
       'LICENSE',
       'README.md',
-      'scripts/run-plugin-bash.mjs',
-      'scripts/setup-clone-loop.sh',
+      'scripts/setup-clone-loop.mjs',
     ]
 
     for (const file of pluginFiles) {
       assert.equal(existsSync(new URL(file, root)), true, `${file} exists`)
+    }
+
+    for (const file of [
+      'hooks/stop-hook.sh',
+      'scripts/run-plugin-bash.mjs',
+      'scripts/setup-clone-loop.sh',
+    ]) {
+      assert.equal(existsSync(new URL(file, root)), false, `${file} is not published`)
     }
   })
 
@@ -63,52 +70,54 @@ describe('Clone Claude plugin contract', () => {
     assert.match(loopCommand, /# Clone Loop Command/)
   })
 
-  it('runs Clone Loop setup through the Node bash launcher instead of shell pre-execution', () => {
+  it('runs Clone Loop setup directly through Node instead of Bash scripts', () => {
     const loopCommand = read('commands/loop.md')
 
-    assert.match(loopCommand, /allowed-tools: Bash\(node \*run-plugin-bash\.mjs\*\)/)
+    assert.match(loopCommand, /allowed-tools: Bash\(node \*setup-clone-loop\.mjs\*\)/)
     assert.match(
       loopCommand,
-      /node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/run-plugin-bash\.mjs" scripts\/setup-clone-loop\.sh \$ARGUMENTS/,
+      /node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/setup-clone-loop\.mjs" \$ARGUMENTS/,
     )
     assert.match(loopCommand, /Use the Bash tool/)
     assert.doesNotMatch(loopCommand, /```!/)
+    assert.doesNotMatch(loopCommand, /run-plugin-bash/)
   })
 
-  it('runs the Stop hook through the Node bash launcher', () => {
+  it('runs the Stop hook directly through Node', () => {
     const hooks = JSON.parse(read('hooks/hooks.json'))
     const command = hooks.hooks.Stop[0].hooks[0].command
 
     assert.equal(
       command,
-      'node "${CLAUDE_PLUGIN_ROOT}/scripts/run-plugin-bash.mjs" hooks/stop-hook.sh',
+      'node "${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.mjs"',
     )
   })
 
   it('persists Clone prediction settings when starting a Clone Loop', () => {
-    const setup = read('scripts/setup-clone-loop.sh')
+    const setup = read('scripts/setup-clone-loop.mjs')
 
-    assert.match(setup, /CLONE_THRESHOLD="0\.8"/)
-    assert.match(setup, /CLONE_K="1"/)
-    assert.match(setup, /CLONE_AGENT="Claude Code Clone Loop"/)
+    assert.match(setup, /let cloneThreshold = '0\.8'/)
+    assert.match(setup, /let cloneK = '1'/)
+    assert.match(setup, /let cloneAgent = 'Claude Code Clone Loop'/)
     assert.match(setup, /--clone-threshold/)
-    assert.match(setup, /clone_threshold: \$CLONE_THRESHOLD/)
-    assert.match(setup, /clone_k: \$CLONE_K/)
-    assert.match(setup, /clone_agent: "\$CLONE_AGENT"/)
+    assert.match(setup, /clone_threshold: \$\{cloneThreshold\}/)
+    assert.match(setup, /clone_k: \$\{cloneK\}/)
+    assert.match(setup, /clone_agent: \$\{quoteYaml\(cloneAgent\)\}/)
   })
 
   it('calls Clone MCP from the hook and passes confident predictions to Claude', () => {
-    const hook = read('hooks/stop-hook.sh')
+    const hook = read('hooks/stop-hook.mjs')
 
-    assert.match(hook, /clone_predict_next_prompt/)
+    assert.match(hook, /clonePredictNextPrompt/)
     assert.match(hook, /tools\/call/)
     assert.match(hook, /predict_next_prompt/)
     assert.match(hook, /last_assistant_message/)
     assert.match(hook, /predicted_response/)
     assert.match(hook, /confidence/)
-    assert.match(hook, /confidence_clears_threshold/)
+    assert.match(hook, /Number\(predictedConfidence\) >= Number\(cloneThreshold\)/)
     assert.match(hook, /user-configured confidence threshold/)
     assert.match(hook, /human escalation/)
     assert.doesNotMatch(hook, /mcp__clone__submit_feedback/)
+    assert.doesNotMatch(hook, /Git Bash/)
   })
 })

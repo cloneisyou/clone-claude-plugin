@@ -110,8 +110,8 @@ commands/loop.md               Starts Clone Loop with /clone:loop.
 commands/cancel-loop.md        Cancels the active Clone Loop.
 commands/help.md               Explains Clone Loop to the user.
 hooks/hooks.json               Registers a Stop hook.
-hooks/stop-hook.sh             Blocks stop and injects Clone predictions.
-scripts/setup-clone-loop.sh    Parses options and writes loop state.
+hooks/stop-hook.mjs            Blocks stop and injects Clone predictions.
+scripts/setup-clone-loop.mjs   Parses options and writes loop state.
 README.md                      User documentation.
 LICENSE                        Apache-2.0 license.
 ```
@@ -141,21 +141,13 @@ stored beside the original prompt.
 - Optional Claude MCP permission for manual `mcp__clone__predict_next_prompt`
   calls. The v2 loop path calls Clone MCP directly from the Stop hook.
 
-Runtime shell requirements differ by OS:
+Runtime requirements:
 
-- macOS / Linux: `bash`, `node`, `perl`, `sed`, and `awk` must be on `PATH`.
-- Windows: Git for Windows and Node are required. Clone uses a Node launcher
-  to call Git Bash directly, so `bash` may resolve to WSL as long as Git Bash
-  is installed at `C:\Program Files\Git\bin\bash.exe` or `CLONE_BASH_PATH`
-  points to the Git Bash executable.
+- Node.js must be on `PATH`.
+- Windows works from PowerShell or cmd. Git Bash is not required.
 
-Clone Loop uses Node for JSON parsing, so Windows does not need a separate
-`jq` install when Git Bash is present.
-
-> [!IMPORTANT]
-> On Windows, do not run Clone Loop through WSL Bash. If Git for Windows is not
-> installed in the standard location, set `CLONE_BASH_PATH` to the Git Bash
-> executable before launching Claude Code.
+Claude Code may still label shell-tool calls as `Bash` in the UI, but Clone's
+runtime path launches Node scripts directly.
 
 Clone's direct remote MCP endpoint is registered in `.mcp.json`:
 
@@ -191,7 +183,7 @@ your own Clone memory and avoid the shared demo environment.
 ### macOS / Linux
 
 ```bash
-command -v bash node perl sed awk
+command -v node
 claude plugin validate .
 ```
 
@@ -199,17 +191,7 @@ claude plugin validate .
 
 ```powershell
 Get-Command node
-Get-Command perl
-Get-Command sed
-Get-Command awk
-Test-Path "C:\Program Files\Git\bin\bash.exe"
 claude.exe plugin validate .
-```
-
-If Git for Windows is installed somewhere else, set `CLONE_BASH_PATH`:
-
-```powershell
-$env:CLONE_BASH_PATH = "D:\Apps\Git\bin\bash.exe"
 ```
 
 ## Usage
@@ -244,7 +226,7 @@ Cancel the loop:
 
 1. `/clone:loop` writes `.claude/clone-loop.local.md`.
 2. Claude works on the task.
-3. When Claude tries to stop, `hooks/stop-hook.sh` runs.
+3. When Claude tries to stop, `hooks/stop-hook.mjs` runs.
 4. The hook keeps Clone Loop safety checks: session isolation, corrupted-state
    cleanup, max iterations, and completion promise.
 5. If the loop continues, the hook calls Clone MCP `predict_next_prompt`
@@ -468,7 +450,8 @@ claude.exe plugin install clone@claude-plugins-official --scope user
 ```
 
 To pin a frozen version for session-only use, replace `main` with
-`clone-plugin-v0.2.4` for the current v2 release,
+`clone-plugin-v0.2.5` for the current v2 release,
+`clone-plugin-v0.2.4` for the public demo key fallback release,
 `clone-plugin-v0.2.3` for the Windows launcher release,
 `clone-plugin-v0.2.2` for the command cleanup release,
 `clone-plugin-v0.2.1` for the previous v2 release,
