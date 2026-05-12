@@ -219,7 +219,7 @@ describe('Clone Loop v2 stop hook', () => {
         const output = JSON.parse(result.stdout)
         assert.equal(output.decision, 'block')
         assert.match(output.reason, /Commit this and move on\./)
-        assert.match(output.reason, /confidence 0\.91/)
+        assert.match(output.reason, /Confidence: 0\.91000/)
         assertProminentPredictedPrompt(output.reason, 2, 'Commit this and move on.')
         assert.doesNotMatch(output.reason, /mcp__clone__predict_next_prompt/)
 
