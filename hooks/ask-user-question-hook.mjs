@@ -12,6 +12,7 @@ import {
   loadInjectedUserTurns,
   loadIterationBoundaries,
 } from '../scripts/conversation-context.mjs'
+import { submitFeedback } from '../scripts/clone-mcp.mjs'
 
 const LOOP_STATE_FILE = resolve(process.cwd(), '.claude', 'clone-loop.local.md')
 const LOOP_HISTORY_FILE = resolve(process.cwd(), '.claude', 'clone-loop.history.local.jsonl')
@@ -482,7 +483,7 @@ async function main() {
           historyPath: LOOP_HISTORY_FILE,
         }),
         threshold: cloneThreshold,
-        sessionId: cloneSessionId || undefined,
+        sessionId: cloneSessionId || hookSession || undefined,
         mcpSessionId: mcpSessionIdInitial,
       })
     } catch (error) {

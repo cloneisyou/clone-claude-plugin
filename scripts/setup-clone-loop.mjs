@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { recordAgentPrompt, startCloneSession } from './clone-mcp.mjs'
 
 const args = process.argv.slice(2)
 const promptParts = []
 let maxIterations = '0'
 let cloneThreshold = '0.6'
 let cloneAgent = 'Claude Code Clone Loop'
-const ANSI_BOLD = '\u001b[1m'
-const ANSI_PURPLE = '\u001b[35m'
-const ANSI_RESET = '\u001b[0m'
+const ANSI_BOLD = '[1m'
+const ANSI_PURPLE = '[35m'
+const ANSI_RESET = '[0m'
 
 function usage() {
   console.log(`Clone Loop - iterative development loop with Clone-predicted next prompts
@@ -135,7 +136,8 @@ started_at: "${startedAt}"
 ${prompt}
 `
 
-writeFileSync(join(claudeDir, 'clone-loop.local.md'), state)
+const statePath = join(claudeDir, 'clone-loop.local.md')
+writeFileSync(statePath, state)
 
 try {
   appendFileSync(
@@ -151,6 +153,52 @@ try {
     })}\n`,
   )
 } catch {}
+
+async function bootstrapCloneSession() {
+  if (String(process.env.CLONE_LOOP_DISABLE_SESSION || '').trim() === '1') return
+  try {
+    const { cloneSessionId, mcpSessionId } = await startCloneSession({
+      sourceDetail: 'clone-loop:setup',
+    })
+    const recorded = await recordAgentPrompt({
+      cloneSessionId,
+      mcpSessionId,
+      agent: cloneAgent,
+      prompt,
+      source: 'user',
+      sourceDetail: 'clone-loop:iteration-1',
+    })
+    const promptEventId = recorded?.eventId || ''
+
+    let content = readFileSync(statePath, 'utf8')
+    const insert = []
+    if (cloneSessionId) insert.push(`clone_session_id: ${quoteYaml(cloneSessionId)}`)
+    if (mcpSessionId) insert.push(`mcp_session_id: ${quoteYaml(mcpSessionId)}`)
+    if (promptEventId) insert.push(`last_prompt_event_id: ${quoteYaml(promptEventId)}`)
+    if (insert.length) {
+      content = content.replace(/^started_at: .*$/m, (match) => `${match}\n${insert.join('\n')}`)
+      writeFileSync(statePath, content)
+    }
+    try {
+      appendFileSync(
+        join(claudeDir, 'clone-loop.history.local.jsonl'),
+        `${JSON.stringify({
+          ts: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+          event: 'session-started',
+          clone_session_id: cloneSessionId,
+          mcp_session_id: mcpSessionId,
+          prompt_event_id: promptEventId,
+        })}\n`,
+      )
+    } catch {}
+  } catch (error) {
+    console.error(
+      `Clone Loop: Clone MCP session bootstrap failed; continuing without session context. (${error?.message || String(error)})`,
+    )
+  }
+}
+
+await bootstrapCloneSession()
 
 console.log(`${formatIterationPromptLine({ iteration: 1, prompt })}
 
