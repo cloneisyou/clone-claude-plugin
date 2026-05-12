@@ -421,9 +421,7 @@ confidence ${predictedConfidence}. Evaluate
 the prediction in context, then continue as if the user had provided the
 predicted prompt when it is consistent with the current task state.
 Prediction reasoning: ${prediction.reasoning || ''}
-`, `${systemMessage}
-
-${predictedPromptSection}`)
+`, systemMessage)
     return
   }
 
@@ -454,9 +452,7 @@ Clone was not confident enough to continue automatically.
 
 ${predictedPromptSection}
 
-The loop state file has been removed. Tell the user Clone was not confident enough and wait for human input.`, `Clone Loop stopped because Clone confidence was below threshold.
-
-${predictedPromptSection}`)
+The loop state file has been removed. Tell the user Clone was not confident enough and wait for human input.`, 'Clone Loop stopped because Clone confidence was below threshold.')
 }
 
 main().catch((error) => {
