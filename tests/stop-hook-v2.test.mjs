@@ -12,11 +12,12 @@ const hookPath = join(pluginRoot, 'hooks', 'stop-hook.mjs')
 const ANSI_BOLD = '\u001b[1m'
 const ANSI_PURPLE = '\u001b[35m'
 const ANSI_RESET = '\u001b[0m'
-const PURPLE_BOLD_HEADING = `${ANSI_BOLD}${ANSI_PURPLE}**Clone predicted the user's next prompt**${ANSI_RESET}`
 
-function assertProminentPredictedPrompt(reason, predictedResponse) {
-  assert.match(reason, new RegExp(escapeRegExp(PURPLE_BOLD_HEADING)))
-  assert.match(reason, new RegExp(escapeRegExp(`${ANSI_PURPLE}> ${predictedResponse}${ANSI_RESET}`)))
+function assertProminentPredictedPrompt(reason, iteration, predictedResponse) {
+  assert.match(
+    reason,
+    new RegExp(escapeRegExp(`${ANSI_BOLD}${ANSI_PURPLE}Iteration ${iteration} : ${predictedResponse}${ANSI_RESET}`)),
+  )
 }
 
 function escapeRegExp(value) {
@@ -25,7 +26,7 @@ function escapeRegExp(value) {
 
 function writeState(workdir, overrides = {}) {
   const state = {
-    iteration: 0,
+    iteration: 1,
     max_iterations: 3,
     completion_promise: 'DONE',
     session_id: 'session-123',
@@ -209,11 +210,11 @@ describe('Clone Loop v2 stop hook', () => {
         assert.equal(output.decision, 'block')
         assert.match(output.reason, /Commit this and move on\./)
         assert.match(output.reason, /confidence 0\.91/)
-        assertProminentPredictedPrompt(output.reason, 'Commit this and move on.')
+        assertProminentPredictedPrompt(output.reason, 2, 'Commit this and move on.')
         assert.doesNotMatch(output.reason, /mcp__clone__predict_next_prompt/)
 
         const state = readFileSync(join(workdir, '.claude', 'clone-loop.local.md'), 'utf8')
-        assert.match(state, /iteration: 1/)
+        assert.match(state, /iteration: 2/)
       },
     )
   })
@@ -249,7 +250,7 @@ describe('Clone Loop v2 stop hook', () => {
         const output = JSON.parse(result.stdout)
         assert.equal(output.decision, 'block')
         assert.match(output.reason, /not confident enough/i)
-        assertProminentPredictedPrompt(output.reason, 'Maybe run more tests?')
+        assertProminentPredictedPrompt(output.reason, 2, 'Maybe run more tests?')
         assert.throws(() => readFileSync(join(workdir, '.claude', 'clone-loop.local.md')))
       },
     )

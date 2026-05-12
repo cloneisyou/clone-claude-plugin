@@ -74,12 +74,11 @@ function block(reason, systemMessage) {
   console.log(JSON.stringify({ decision: 'block', reason, systemMessage }, null, 2))
 }
 
-function formatBlockquote(value) {
+function formatPromptLines(value) {
   return String(value || '')
     .trim()
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .join('\n> ')
 }
 
 function purple(value) {
@@ -90,14 +89,20 @@ function purpleBold(value) {
   return `${ANSI_BOLD}${ANSI_PURPLE}${value}${ANSI_RESET}`
 }
 
-function formatPredictedPromptSection({ predictedResponse, predictedConfidence, cloneThreshold, prediction }) {
-  return `${purpleBold("**Clone predicted the user's next prompt**")}
+function formatIterationPromptLine({ iteration, prompt }) {
+  const [firstLine = '', ...remainingLines] = formatPromptLines(prompt)
+  const continuation = remainingLines.length
+    ? `\n${purple(remainingLines.map((line) => `> ${line}`).join('\n'))}`
+    : ''
+  return `${purpleBold(`Iteration ${iteration} : ${firstLine}`)}${continuation}`
+}
+
+function formatPredictedPromptSection({ iteration, predictedResponse, predictedConfidence, cloneThreshold, prediction }) {
+  return `${formatIterationPromptLine({ iteration, prompt: predictedResponse })}
 
 Confidence: ${predictedConfidence} / threshold: ${cloneThreshold}
 Prediction status: ${prediction.status || ''}
-Prediction id: ${prediction.id || ''}
-
-${purple(`> ${formatBlockquote(predictedResponse)}`)}`
+Prediction id: ${prediction.id || ''}`
 }
 
 function isIntegerString(value) {
@@ -368,6 +373,7 @@ The loop state file has been removed. Tell the user Clone could not produce a sa
       ? `Keep the Clone Loop completion promise rule: only output <promise>${completionPromise}</promise> when it is genuinely true.`
       : 'No completion promise is set for this Clone Loop.'
     const predictedPromptSection = formatPredictedPromptSection({
+      iteration: nextIteration,
       predictedResponse,
       predictedConfidence,
       cloneThreshold,
@@ -413,6 +419,7 @@ ${predictedPromptSection}`)
   })
   removeState()
   const predictedPromptSection = formatPredictedPromptSection({
+    iteration: nextIteration,
     predictedResponse,
     predictedConfidence,
     cloneThreshold,

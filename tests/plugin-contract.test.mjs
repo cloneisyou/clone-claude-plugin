@@ -155,8 +155,9 @@ describe('Clone Claude plugin contract', () => {
     const hook = read('hooks/stop-hook.mjs')
 
     assert.match(hook, /ANSI_PURPLE = '\\u001b\[35m'/)
-    assert.match(hook, /purpleBold\("\*\*Clone predicted the user's next prompt\*\*"\)/)
+    assert.match(hook, /formatIterationPromptLine/)
+    assert.match(hook, /`Iteration \$\{iteration\} : \$\{firstLine\}`/)
     assert.match(hook, /Confidence: \$\{predictedConfidence\} \/ threshold: \$\{cloneThreshold\}/)
-    assert.match(hook, /purple\(`> \$\{formatBlockquote\(predictedResponse\)\}`\)/)
+    assert.match(hook, /formatIterationPromptLine\(\{ iteration, prompt: predictedResponse \}\)/)
   })
 })
