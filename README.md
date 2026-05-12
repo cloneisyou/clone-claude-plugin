@@ -186,8 +186,9 @@ cd clone-claude-plugin
 claude --plugin-dir .
 ```
 
-Pin a frozen version by replacing `main` with `clone-plugin-v0.3.0` (current)
-or `clone-plugin-v0.2.7` (previous).
+Replace `main` with a release tag (e.g. `clone-plugin-v0.3.0`) to pin a
+frozen version. Available tags live on the
+[Releases](https://github.com/cloneisyou/clone-claude-plugin/releases) page.
 
 > [!NOTE]
 > The `clone-labs` marketplace is hosted from this repo — not the official
