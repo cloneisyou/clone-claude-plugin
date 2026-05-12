@@ -7,7 +7,10 @@ import {
   HISTORY_WINDOW_TURNS,
   assistantTextsThisIteration,
   formatConversationHistory,
+  iterationBlocksThisIteration,
+  iterationTimelinesByBoundary,
   loadInjectedUserTurns,
+  loadIterationBoundaries,
 } from '../scripts/conversation-context.mjs'
 
 const LOOP_STATE_FILE = resolve(process.cwd(), '.claude', 'clone-loop.local.md')
@@ -276,23 +279,31 @@ async function main() {
   const transcriptPath = hookInput.transcript_path ? String(hookInput.transcript_path) : ''
   const sinceTs = findLastContinueTs(LOOP_HISTORY_FILE)
 
+  let iterationBlocks = []
   let assistantTexts = []
   if (transcriptPath && existsSync(transcriptPath)) {
     try {
-      assistantTexts = assistantTextsThisIteration(transcriptPath, sinceTs)
+      iterationBlocks = iterationBlocksThisIteration(transcriptPath, sinceTs)
     } catch (error) {
-      console.error('Clone Loop: Failed to parse transcript JSON; falling back to last_assistant_message.')
+      console.error('Clone Loop: Failed to parse transcript JSON; falling back to text-only extraction.')
       console.error(`Error: ${error?.message || String(error)}`)
-      assistantTexts = []
+      iterationBlocks = []
+    }
+    if (!iterationBlocks.length) {
+      try {
+        assistantTexts = assistantTextsThisIteration(transcriptPath, sinceTs)
+      } catch {
+        assistantTexts = []
+      }
     }
   }
 
-  if (!assistantTexts.length) {
+  if (!iterationBlocks.length && !assistantTexts.length) {
     const fallback = hookInput.last_assistant_message ? String(hookInput.last_assistant_message) : ''
     assistantTexts = fallback ? [fallback] : []
   }
 
-  if (!assistantTexts.length) {
+  if (!iterationBlocks.length && !assistantTexts.length) {
     console.error('Clone Loop: No assistant messages found; stopping.')
     removeState()
     return
@@ -311,12 +322,33 @@ async function main() {
   const systemMessage = `Clone Loop iteration ${nextIteration}.`
 
   const injectedUserTurns = loadInjectedUserTurns(LOOP_HISTORY_FILE)
+
+  // Pull per-iteration transcript timelines so prior-iter assistant work
+  // (text + tool_use + tool_result) lands under each user (clone-prediction)
+  // marker. Drops the current-iteration entry — that one is already rendered
+  // as the footer through `iterationBlocks`.
+  let priorIterTimelines = []
+  if (transcriptPath && existsSync(transcriptPath)) {
+    try {
+      const boundaries = loadIterationBoundaries(LOOP_HISTORY_FILE)
+      const all = iterationTimelinesByBoundary(transcriptPath, boundaries)
+      // Last boundary is the in-progress iter; drop it so we don't double up.
+      priorIterTimelines = all.slice(0, -1)
+    } catch (error) {
+      console.error('Clone Loop: Failed to extract prior-iter timelines; continuing without them.')
+      console.error(`Error: ${error?.message || String(error)}`)
+      priorIterTimelines = []
+    }
+  }
+
   const agentInput = formatConversationHistory({
     promptText,
     iteration: nextIteration,
     threshold: cloneThreshold,
     injectedUserTurns,
     assistantTexts,
+    iterationBlocks,
+    priorIterTimelines,
     windowTurns: HISTORY_WINDOW_TURNS,
   })
 

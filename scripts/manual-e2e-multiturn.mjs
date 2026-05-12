@@ -51,9 +51,18 @@ const injectedUserTurns = [
   { ts: '2026-05-12T10:05:00Z', source: 'auto-answer', text: 'Q: Should we use Zod or Joi for validation?\nA: Zod' },
   { ts: '2026-05-12T10:10:00Z', source: 'clone-prediction', text: 'Now write integration tests for the validation errors.', iteration: 3 },
 ]
-const assistantTexts = [
-  'I added Zod validation to POST /todos and PATCH /todos/:id. The handlers now reject malformed bodies with HTTP 400 and a structured error envelope.',
-  'I also added unit coverage for the schema. Next I would write integration tests that hit the express app via supertest.',
+// Simulated current-iteration transcript with text + tool_use + tool_result
+// so this script exercises the rich agent_input builder end-to-end.
+const iterationBlocks = [
+  { kind: 'text', text: 'I will start by reading the current routes file to see what is already wired up.' },
+  { kind: 'tool_use', name: 'Read', input: { file_path: 'src/routes/todos.ts' } },
+  { kind: 'tool_result', name: 'Read', text: '1\timport { Router } from \'express\'\n2\timport { db } from \'../db\'\n3\t\n4\tconst router = Router()\n5\trouter.post(\'/\', async (req, res) => {\n6\t  const todo = await db.todo.create({ data: req.body })\n7\t  res.json(todo)\n8\t})\n9\trouter.patch(\'/:id\', async (req, res) => {\n10\t  const todo = await db.todo.update({ where: { id: req.params.id }, data: req.body })\n11\t  res.json(todo)\n12\t})\n... [40 more Read output lines] ...\n51\texport default router' },
+  { kind: 'tool_use', name: 'Edit', input: { file_path: 'src/routes/todos.ts', old_string: 'router.post(...)', new_string: 'router.post(..., validate(TodoCreateSchema))' } },
+  { kind: 'tool_result', name: 'Edit', text: 'The file src/routes/todos.ts has been updated successfully.' },
+  { kind: 'text', text: 'Now I will add Zod schemas and apply them to POST /todos and PATCH /todos/:id. The handlers will reject malformed bodies with HTTP 400 and a structured error envelope.' },
+  { kind: 'tool_use', name: 'Bash', input: { command: 'pnpm test' } },
+  { kind: 'tool_result', name: 'Bash', text: '> clone-claude-plugin-tests@ test\n> node --test tests/...\n  ✔ validates required fields\n  ✔ rejects unknown keys\n  ✔ returns 400 on malformed body\n... [12 more Bash lines] ...\nℹ tests 23\nℹ pass 23\nℹ fail 0' },
+  { kind: 'text', text: 'Schemas applied and the unit test suite is green. Next I would write integration tests that hit the express app via supertest.' },
 ]
 
 const agentInput = formatConversationHistory({
@@ -61,7 +70,7 @@ const agentInput = formatConversationHistory({
   iteration: 4,
   threshold: '0.8',
   injectedUserTurns,
-  assistantTexts,
+  iterationBlocks,
   windowTurns: HISTORY_WINDOW_TURNS,
 })
 

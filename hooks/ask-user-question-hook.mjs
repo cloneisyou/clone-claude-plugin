@@ -7,7 +7,10 @@ import {
   HISTORY_WINDOW_TURNS,
   assistantTextsThisIteration,
   formatConversationHistory,
+  iterationBlocksThisIteration,
+  iterationTimelinesByBoundary,
   loadInjectedUserTurns,
+  loadIterationBoundaries,
 } from '../scripts/conversation-context.mjs'
 
 const LOOP_STATE_FILE = resolve(process.cwd(), '.claude', 'clone-loop.local.md')
@@ -295,6 +298,26 @@ function safeAssistantTextsThisIteration(transcriptPath, sinceTs) {
   }
 }
 
+function safeIterationBlocksThisIteration(transcriptPath, sinceTs) {
+  if (!transcriptPath || !existsSync(transcriptPath)) return []
+  try {
+    return iterationBlocksThisIteration(transcriptPath, sinceTs)
+  } catch {
+    return []
+  }
+}
+
+function safePriorIterTimelines(transcriptPath, historyPath) {
+  if (!transcriptPath || !existsSync(transcriptPath)) return []
+  try {
+    const boundaries = loadIterationBoundaries(historyPath)
+    const all = iterationTimelinesByBoundary(transcriptPath, boundaries)
+    return all.slice(0, -1)
+  } catch {
+    return []
+  }
+}
+
 function findLastContinueTs(historyPath) {
   if (!historyPath || !existsSync(historyPath)) return ''
   let raw
@@ -336,7 +359,11 @@ function buildQuestionAgentInput({
 }) {
   const injectedUserTurns = loadInjectedUserTurns(historyPath)
   const sinceTs = findLastContinueTs(historyPath)
-  const assistantTexts = safeAssistantTextsThisIteration(transcriptPath, sinceTs)
+  const iterationBlocks = safeIterationBlocksThisIteration(transcriptPath, sinceTs)
+  const assistantTexts = iterationBlocks.length
+    ? []
+    : safeAssistantTextsThisIteration(transcriptPath, sinceTs)
+  const priorIterTimelines = safePriorIterTimelines(transcriptPath, historyPath)
 
   const conversationContext = formatConversationHistory({
     promptText: state.prompt,
@@ -344,6 +371,8 @@ function buildQuestionAgentInput({
     threshold,
     injectedUserTurns,
     assistantTexts,
+    iterationBlocks,
+    priorIterTimelines,
     windowTurns: HISTORY_WINDOW_TURNS,
   })
 
@@ -385,6 +414,16 @@ function allowAnswer({ toolInput, answers, confidence, threshold }) {
   )
 }
 
+async function safeReject({ predictionId, mcpSessionId }) {
+  if (!predictionId) return
+  try {
+    await submitFeedback({ predictionId, status: 'rejected', mcpSessionId })
+    appendHistory({ event: 'feedback-sent', source: 'ask-user-question', prediction_id: predictionId, status: 'rejected' })
+  } catch (error) {
+    appendHistory({ event: 'feedback-sent', source: 'ask-user-question', prediction_id: predictionId, status: 'rejected', error: error?.message || String(error) })
+  }
+}
+
 async function main() {
   const hookInput = parseJson(await readStdin())
   if (hookInput.tool_name && hookInput.tool_name !== 'AskUserQuestion') return
@@ -400,6 +439,8 @@ async function main() {
     session_id: stateSession,
     clone_threshold: cloneThresholdRaw,
     clone_agent: cloneAgentRaw,
+    clone_session_id: cloneSessionId,
+    mcp_session_id: mcpSessionIdInitial,
   } = state.frontmatter
 
   const hookSession = hookInput.session_id ? String(hookInput.session_id) : ''
@@ -441,7 +482,8 @@ async function main() {
           historyPath: LOOP_HISTORY_FILE,
         }),
         threshold: cloneThreshold,
-        sessionId: hookSession,
+        sessionId: cloneSessionId || undefined,
+        mcpSessionId: mcpSessionIdInitial,
       })
     } catch (error) {
       const fallbackAnswer = String(options[0]?.label || '').trim()
@@ -486,6 +528,7 @@ async function main() {
         prediction_id: prediction.id || null,
         status: prediction.status || null,
       })
+      await safeReject({ predictionId: prediction.id, mcpSessionId: mcpSessionIdInitial })
       return
     }
 

@@ -520,6 +520,153 @@ describe('Clone Loop v2 stop hook', () => {
     )
   })
 
+  it('includes tool_use and tool_result blocks from the current iteration', async () => {
+    writeState(workdir, { iteration: 2 })
+    mkdirSync(join(workdir, '.claude'), { recursive: true })
+    const historyPath = join(workdir, '.claude', 'clone-loop.history.local.jsonl')
+    writeFileSync(
+      historyPath,
+      JSON.stringify({
+        ts: '2026-01-01T00:00:10Z',
+        event: 'stop',
+        decision: 'continue',
+        iteration: 2,
+        confidence: 0.9,
+        threshold: 0.8,
+        prediction_id: 'p-rich',
+        status: 'auto',
+        predicted_response: 'Make the change.',
+      }) + '\n',
+    )
+
+    const transcriptPath = join(workdir, 'transcript.jsonl')
+    const transcriptLines = [
+      {
+        timestamp: '2026-01-01T00:00:15Z',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'I will read the routes file first.' }] },
+      },
+      {
+        timestamp: '2026-01-01T00:00:16Z',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'toolu_1', name: 'Read', input: { file_path: 'src/routes/todos.ts' } }],
+        },
+      },
+      {
+        timestamp: '2026-01-01T00:00:17Z',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'line 1\nline 2\nline 3' }],
+        },
+      },
+      {
+        timestamp: '2026-01-01T00:00:18Z',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'toolu_2', name: 'Bash', input: { command: 'pnpm test' } }],
+        },
+      },
+      {
+        timestamp: '2026-01-01T00:00:19Z',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_2', content: 'tests pass' }],
+        },
+      },
+    ]
+    writeFileSync(transcriptPath, transcriptLines.map((line) => JSON.stringify(line)).join('\n') + '\n')
+
+    await withMcpServer(
+      {
+        id: 'prediction-rich',
+        status: 'auto',
+        threshold: 0.8,
+        predicted_response: 'Continue.',
+        confidence: 0.9,
+        candidates: [],
+      },
+      async (endpoint, calls) => {
+        const result = await runHook(workdir, endpoint, { transcriptPath, lastAssistantMessage: '' })
+
+        assert.equal(result.status, 0, JSON.stringify({ stdout: result.stdout, stderr: result.stderr }, null, 2))
+        const agentInput = calls[1].params.arguments.agent_input
+        assert.match(agentInput, /I will read the routes file first\./)
+        assert.match(agentInput, /\[tool_use\] Read: file_path="src\/routes\/todos\.ts"/)
+        assert.match(agentInput, /\[tool_use\] Bash: command="pnpm test"/)
+        assert.match(agentInput, /\[tool_result Read\]:\nline 1\nline 2\nline 3/)
+        assert.match(agentInput, /\[tool_result Bash\]:\ntests pass/)
+      },
+    )
+  })
+
+  it('summarizes long tool_result content with head and tail', async () => {
+    writeState(workdir, { iteration: 2 })
+    mkdirSync(join(workdir, '.claude'), { recursive: true })
+    const historyPath = join(workdir, '.claude', 'clone-loop.history.local.jsonl')
+    writeFileSync(
+      historyPath,
+      JSON.stringify({
+        ts: '2026-01-01T00:00:10Z',
+        event: 'stop',
+        decision: 'continue',
+        iteration: 2,
+        confidence: 0.9,
+        threshold: 0.8,
+        prediction_id: 'p-summary',
+        status: 'auto',
+        predicted_response: 'Carry on.',
+      }) + '\n',
+    )
+
+    const longLines = []
+    for (let index = 1; index <= 50; index += 1) {
+      longLines.push(`line ${index}`)
+    }
+    const transcriptPath = join(workdir, 'transcript.jsonl')
+    const transcriptLines = [
+      {
+        timestamp: '2026-01-01T00:00:18Z',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'toolu_big', name: 'Bash', input: { command: 'cat big.log' } }],
+        },
+      },
+      {
+        timestamp: '2026-01-01T00:00:19Z',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_big', content: longLines.join('\n') }],
+        },
+      },
+    ]
+    writeFileSync(transcriptPath, transcriptLines.map((line) => JSON.stringify(line)).join('\n') + '\n')
+
+    await withMcpServer(
+      {
+        id: 'prediction-summary',
+        status: 'auto',
+        threshold: 0.8,
+        predicted_response: 'Continue.',
+        confidence: 0.9,
+        candidates: [],
+      },
+      async (endpoint, calls) => {
+        const result = await runHook(workdir, endpoint, { transcriptPath, lastAssistantMessage: '' })
+
+        assert.equal(result.status, 0, JSON.stringify({ stdout: result.stdout, stderr: result.stderr }, null, 2))
+        const agentInput = calls[1].params.arguments.agent_input
+        // Head: first 4 lines kept.
+        assert.match(agentInput, /line 1\nline 2\nline 3\nline 4/)
+        // Tail: last 2 lines kept.
+        assert.match(agentInput, /line 49\nline 50/)
+        // Marker shows how many were dropped.
+        assert.match(agentInput, /\[44 more Bash lines\] \.\.\./)
+        // Middle lines are not present verbatim.
+        assert.doesNotMatch(agentInput, /\nline 25\n/)
+      },
+    )
+  })
+
   it('prefers CLONE_API_TOKEN over a saved plugin API key', async () => {
     writeState(workdir)
     const pluginDataDir = mkdtempSync(join(tmpdir(), 'clone-plugin-data-'))
