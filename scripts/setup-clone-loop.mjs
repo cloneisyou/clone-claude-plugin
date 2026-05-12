@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { recordAgentPrompt, startCloneSession } from './clone-mcp.mjs'
 
 const args = process.argv.slice(2)
 const promptParts = []
 let maxIterations = '0'
 let cloneThreshold = '0.6'
 let cloneAgent = 'Claude Code Clone Loop'
-const ANSI_BOLD = '\u001b[1m'
-const ANSI_PURPLE = '\u001b[35m'
-const ANSI_RESET = '\u001b[0m'
+const ANSI_BOLD = '[1m'
+const ANSI_PURPLE = '[35m'
+const ANSI_RESET = '[0m'
 
 function usage() {
   console.log(`Clone Loop - iterative development loop with Clone-predicted next prompts
@@ -135,7 +136,8 @@ started_at: "${startedAt}"
 ${prompt}
 `
 
-writeFileSync(join(claudeDir, 'clone-loop.local.md'), state)
+const statePath = join(claudeDir, 'clone-loop.local.md')
+writeFileSync(statePath, state)
 
 try {
   appendFileSync(
