@@ -229,7 +229,7 @@ describe('Clone Loop v2 stop hook', () => {
     )
   })
 
-  it('exits the loop without blocking when Clone signals stop_recommended', async () => {
+  it('blocks with a satisfaction message when Clone signals stop_recommended', async () => {
     writeState(workdir)
 
     await withMcpServer(
@@ -258,14 +258,22 @@ describe('Clone Loop v2 stop hook', () => {
             2,
           ),
         )
-        // Critical: stdout MUST be empty — no `decision: 'block'` JSON.
-        // That's how the hook signals "let Claude's Stop proceed".
-        assert.equal(result.stdout, '', `expected empty stdout, got: ${result.stdout}`)
-        // User-facing diagnostic on stderr.
-        assert.match(result.stderr, /Clone predicted satisfaction/)
+        // Hook must emit a block() so the stop is visible to the user.
+        const output = JSON.parse(result.stdout)
+        assert.equal(output.decision, 'block')
+        // Header line uses purpleBold styling.
+        assert.match(
+          output.reason,
+          new RegExp(
+            escapeRegExp(
+              `${ANSI_BOLD}${ANSI_PURPLE}Clone Loop: Clone predicted the task is complete. Additional user instruction is needed.${ANSI_RESET}`,
+            ),
+          ),
+        )
+        assertProminentPredictedPrompt(output.reason, 2, "good. that's the page.")
         // Loop state file removed so a new session doesn't resume.
         assert.throws(() => readFileSync(join(workdir, '.claude', 'clone-loop.local.md')))
-        // History records the new 'satisfied' decision kind.
+        // History records the 'satisfied' decision kind.
         const history = readFileSync(join(workdir, '.claude', 'clone-loop.history.local.jsonl'), 'utf8')
         assert.match(history, /"decision":"satisfied"/)
       },
@@ -783,5 +791,39 @@ describe('Clone Loop v2 stop hook', () => {
     } finally {
       rmSync(pluginDataDir, { recursive: true, force: true })
     }
+  })
+
+  it('continues the loop and updates session_id when session IDs change', async () => {
+    writeState(workdir, { session_id: 'session-aaa' })
+
+    await withMcpServer(
+      {
+        id: 'prediction-session-update',
+        status: 'auto',
+        threshold: 0.6,
+        predicted_response: 'Continue after session rotation.',
+        confidence: 0.9,
+        candidates: [],
+      },
+      async (endpoint, calls) => {
+        // Hook receives a different session_id than what is stored in the state file.
+        const result = await runHook(workdir, endpoint, { sessionId: 'session-bbb' })
+
+        assert.equal(result.status, 0, JSON.stringify({ stdout: result.stdout, stderr: result.stderr }, null, 2))
+        // Loop continued — block() was called with the prediction.
+        const output = JSON.parse(result.stdout)
+        assert.equal(output.decision, 'block')
+        assert.match(output.reason, /Continue after session rotation\./)
+        // Diagnostic on stderr explaining the session change.
+        assert.match(result.stderr, /session ID changed/)
+        assert.match(result.stderr, /session-aaa/)
+        assert.match(result.stderr, /session-bbb/)
+        // State file updated with the new session_id.
+        const state = readFileSync(join(workdir, '.claude', 'clone-loop.local.md'), 'utf8')
+        assert.match(state, /session_id: session-bbb/)
+        // Clone MCP was called (loop continued).
+        assert.ok(calls.length > 0)
+      },
+    )
   })
 })

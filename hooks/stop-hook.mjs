@@ -251,7 +251,15 @@ async function main() {
   const cloneAgent = cloneAgentRaw || 'Claude Code Clone Loop'
   const hookSession = hookInput.session_id ? String(hookInput.session_id) : ''
 
-  if (stateSession && stateSession !== hookSession) return
+  if (stateSession && stateSession !== hookSession) {
+    console.error(
+      `Clone Loop: session ID changed (state=${stateSession}, hook=${hookSession}); updating state and continuing.`,
+    )
+    // Patch state.content in memory so the iteration write below carries the
+    // corrected session_id into the file (avoids a separate disk round-trip).
+    state.content = state.content.replace(/^session_id: .*/m, `session_id: ${hookSession}`)
+    // Fall through — continue executing the hook with the new session.
+  }
 
   if (!isIntegerString(iteration)) {
     console.error('Clone Loop: state file corrupted; iteration is not numeric.')
@@ -416,11 +424,17 @@ The loop state file has been removed. Tell the user Clone could not produce a sa
       predicted_response: predictedResponse,
     })
     removeState()
-    console.error(
-      `Clone Loop: Clone predicted satisfaction ("${predictedResponse}", ` +
-        `confidence ${Number(predictedConfidence).toFixed(5)}). Exiting loop.`,
+    const satisfiedPromptSection = formatPredictedPromptSection({
+      iteration: nextIteration,
+      predictedResponse,
+      predictedConfidence,
+      cloneThreshold,
+      prediction,
+    })
+    block(
+      `${purpleBold('Clone Loop: Clone predicted the task is complete. Additional user instruction is needed.')}\n\n${satisfiedPromptSection}`,
+      `Clone Loop ended because Clone signaled satisfaction (confidence ${Number(predictedConfidence).toFixed(5)} ≥ threshold ${cloneThreshold}).`,
     )
-    // Intentionally no block() — let Claude's stop go through naturally.
     return
   }
 
