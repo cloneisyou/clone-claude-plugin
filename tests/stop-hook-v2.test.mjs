@@ -38,10 +38,10 @@ function writeState(workdir, overrides = {}) {
     ...overrides,
   }
 
-  const optional = []
-  if (state.clone_session_id) optional.push(`clone_session_id: "${state.clone_session_id}"`)
-  if (state.mcp_session_id) optional.push(`mcp_session_id: "${state.mcp_session_id}"`)
-  if (state.last_prompt_event_id) optional.push(`last_prompt_event_id: "${state.last_prompt_event_id}"`)
+  const optionalLines = []
+  if (state.clone_session_id) optionalLines.push(`clone_session_id: "${state.clone_session_id}"`)
+  if (state.mcp_session_id) optionalLines.push(`mcp_session_id: "${state.mcp_session_id}"`)
+  if (state.last_prompt_event_id) optionalLines.push(`last_prompt_event_id: "${state.last_prompt_event_id}"`)
 
   mkdirSync(join(workdir, '.claude'), { recursive: true })
   writeFileSync(
@@ -51,7 +51,7 @@ iteration: ${state.iteration}
 max_iterations: ${state.max_iterations}
 session_id: ${state.session_id}
 clone_threshold: ${state.clone_threshold}
-clone_agent: "${state.clone_agent}"${optional.length ? '\n' + optional.join('\n') : ''}
+clone_agent: "${state.clone_agent}"${optionalLines.length ? '\n' + optionalLines.join('\n') : ''}
 ---
 ${state.prompt}
 `,
@@ -210,17 +210,9 @@ describe('Clone Loop v2 stop hook', () => {
             2,
           ),
         )
-        const toolCalls = calls.filter((call) => call.method === 'tools/call')
-        const predictCall = toolCalls.find((call) => call.params.name === 'predict_next_prompt')
-        assert.ok(predictCall, 'predict_next_prompt should be called')
-        assert.equal(predictCall.params.arguments.agent, 'Claude Code Clone Loop')
-        assert.match(predictCall.params.arguments.agent_input, /Fix the bug and run tests/)
-        assert.match(predictCall.params.arguments.agent_input, /Tests passed\. What next\?/)
-        assert.equal(predictCall.params.arguments.threshold, 0.8)
-        assert.equal(
-          predictCall.params.arguments.session_id,
-          undefined,
-          'session_id should be absent when no clone_session_id is in state',
+        assert.deepEqual(
+          calls.map((call) => call.method),
+          ['initialize', 'tools/call'],
         )
         assert.equal(calls[1].params.name, 'predict_next_prompt')
         assert.equal(calls[1].params.arguments.agent, 'Claude Code Clone Loop')
@@ -725,7 +717,7 @@ describe('Clone Loop v2 stop hook', () => {
     }
   })
 
-  it('records response and prompt and writes last_prompt_event_id when clone_session_id is set and prediction is auto', async () => {
+  it('records response and prompt and writes last_prompt_event_id when clone_session_id is set', async () => {
     writeState(workdir, {
       clone_session_id: 'clone-session-xyz',
       mcp_session_id: 'mcp-session-xyz',
@@ -738,7 +730,7 @@ describe('Clone Loop v2 stop hook', () => {
       req.setEncoding('utf8')
       for await (const chunk of req) body += chunk
       const payload = JSON.parse(body)
-      calls.push({ method: payload.method, params: payload.params, headers: req.headers })
+      calls.push({ method: payload.method, params: payload.params })
 
       res.statusCode = 200
       res.setHeader('Content-Type', 'text/event-stream')
@@ -753,7 +745,7 @@ describe('Clone Loop v2 stop hook', () => {
         textBody = JSON.stringify({
           id: 'pred-rec-1',
           status: 'auto',
-          threshold: 0.8,
+          threshold: 0.6,
           predicted_response: 'Then write a changelog entry.',
           confidence: 0.95,
           candidates: [],
@@ -777,7 +769,7 @@ describe('Clone Loop v2 stop hook', () => {
       const toolCalls = calls.filter((call) => call.method === 'tools/call')
       const names = toolCalls.map((call) => call.params.name)
       assert.ok(names.includes('record_agent_response'), `record_agent_response should be called: ${names.join(', ')}`)
-      assert.ok(names.includes('predict_next_prompt'))
+      assert.ok(names.includes('predict_next_prompt'), `predict_next_prompt should be called: ${names.join(', ')}`)
       assert.ok(names.includes('record_agent_prompt'), `record_agent_prompt should be called: ${names.join(', ')}`)
 
       const responseCall = toolCalls.find((call) => call.params.name === 'record_agent_response')
@@ -821,20 +813,11 @@ describe('Clone Loop v2 stop hook', () => {
         return
       }
       const toolName = payload.params?.name
-      let textBody
-      if (toolName === 'predict_next_prompt') {
-        textBody = JSON.stringify({
-          id: 'pred-low-1',
-          status: 'escalated',
-          threshold: 0.8,
-          predicted_response: 'Maybe try X?',
-          confidence: 0.3,
-          candidates: [],
-        })
-      } else {
-        textBody = JSON.stringify({ ok: true })
-      }
-      res.end(`data: ${JSON.stringify({ jsonrpc: '2.0', id: payload.id, result: { content: [{ type: 'text', text: textBody }] } })}\n\n`)
+      const text =
+        toolName === 'predict_next_prompt'
+          ? JSON.stringify({ id: 'pred-low-1', status: 'escalated', threshold: 0.6, predicted_response: 'Maybe try X?', confidence: 0.3, candidates: [] })
+          : JSON.stringify({ ok: true })
+      res.end(`data: ${JSON.stringify({ jsonrpc: '2.0', id: payload.id, result: { content: [{ type: 'text', text }] } })}\n\n`)
     })
 
     await new Promise((resolveListen) => server.listen(0, '127.0.0.1', resolveListen))

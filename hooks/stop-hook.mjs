@@ -2,6 +2,7 @@
 
 import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { resolveCloneToken } from '../scripts/clone-auth.mjs'
 import {
   HISTORY_WINDOW_TURNS,
   assistantTextsThisIteration,
@@ -12,7 +13,6 @@ import {
   loadIterationBoundaries,
 } from '../scripts/conversation-context.mjs'
 import {
-  clonePredictNextPrompt,
   recordAgentPrompt,
   recordAgentResponse,
   stopCloneSession,
@@ -500,7 +500,7 @@ async function main() {
       agent: cloneAgent,
       agentInput,
       threshold: cloneThreshold,
-      sessionId: cloneSessionId || undefined,
+      sessionId: cloneSessionId || hookSession || undefined,
       mcpSessionId: mcpSessionIdInitial,
     })
   } catch (error) {
