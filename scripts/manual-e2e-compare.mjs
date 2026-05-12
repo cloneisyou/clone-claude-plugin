@@ -59,7 +59,7 @@ async function callPredict(token, agentInput, label) {
       agent: 'Claude Code Clone Loop',
       agent_input: agentInput,
       k: 3,
-      threshold: 0.8,
+      threshold: 0.6,
     },
   }, init.sessionId)
   const content = call.payload?.result?.content?.[0]
@@ -167,7 +167,7 @@ console.error(`[compare] endpoint=${endpoint}`)
 const baselineInput = formatConversationHistory({
   promptText,
   iteration: 4,
-  threshold: '0.8',
+  threshold: '0.6',
   injectedUserTurns,
   assistantTexts,
   windowTurns: HISTORY_WINDOW_TURNS,
@@ -176,7 +176,7 @@ const baselineInput = formatConversationHistory({
 const richInput = buildRichAgentInput({
   promptText,
   iteration: 4,
-  threshold: '0.8',
+  threshold: '0.6',
   injectedUserTurns,
   transcriptBlocks,
   windowTurns: HISTORY_WINDOW_TURNS,

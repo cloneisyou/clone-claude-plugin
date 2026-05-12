@@ -15,7 +15,7 @@ function writeState(workdir, overrides = {}) {
     iteration: 1,
     max_iterations: 3,
     session_id: 'session-123',
-    clone_threshold: 0.8,
+    clone_threshold: 0.6,
     clone_agent: 'Claude Code Clone Loop',
     prompt: 'Fix the bug and run tests.',
     ...overrides,
@@ -193,7 +193,7 @@ describe('AskUserQuestion PreToolUse hook', () => {
       {
         id: 'question-prediction-1',
         status: 'auto',
-        threshold: 0.8,
+        threshold: 0.6,
         predicted_response: 'Run the focused tests first, then open a PR if green.',
         confidence: 0.91,
       },
@@ -208,7 +208,7 @@ describe('AskUserQuestion PreToolUse hook', () => {
         assert.equal(calls[1].params.name, 'predict_next_prompt')
         assert.match(calls[1].params.arguments.agent_input, /What should we do next\?/)
         assert.match(calls[1].params.arguments.agent_input, /Run tests/)
-        assert.equal(calls[1].params.arguments.threshold, 0.8)
+        assert.equal(calls[1].params.arguments.threshold, 0.6)
         assert.equal(calls[1].params.arguments.k, 1)
 
         const output = JSON.parse(result.stdout)
@@ -256,7 +256,7 @@ describe('AskUserQuestion PreToolUse hook', () => {
       {
         id: 'question-prediction-2',
         status: 'escalated',
-        threshold: 0.8,
+        threshold: 0.6,
         predicted_response: 'I would run the focused tests before opening a PR.',
         confidence: 0.42,
       },
@@ -280,7 +280,7 @@ describe('AskUserQuestion PreToolUse hook', () => {
       {
         id: 'question-prediction-3',
         status: 'auto',
-        threshold: 0.8,
+        threshold: 0.6,
         confidence: 0.9,
         candidates: [
           { predicted_response: 'Default fast path', confidence: 0.62 },
@@ -312,7 +312,7 @@ describe('AskUserQuestion PreToolUse hook', () => {
       {
         id: 'question-prediction-4',
         status: 'escalated',
-        threshold: 0.8,
+        threshold: 0.6,
         confidence: 0.21,
         candidates: [
           { predicted_response: 'Use the default option', confidence: 0.21 },
@@ -366,7 +366,7 @@ describe('AskUserQuestion PreToolUse hook', () => {
         decision: 'continue',
         iteration: 1,
         confidence: 0.9,
-        threshold: 0.8,
+        threshold: 0.6,
         prediction_id: 'p-1',
         status: 'auto',
         predicted_response: 'Run lint after the tests pass.',
@@ -386,7 +386,7 @@ describe('AskUserQuestion PreToolUse hook', () => {
       {
         id: 'question-prediction-history',
         status: 'auto',
-        threshold: 0.8,
+        threshold: 0.6,
         predicted_response: 'Run focused tests',
         confidence: 0.91,
       },

@@ -61,7 +61,7 @@ To update later: `claude plugin marketplace update clone-labs && claude plugin u
 
 - `--max-iterations <n>` — stop after N iterations (`0` = unlimited).
   Start small (5–10) while you tune the prompt.
-- `--clone-threshold <n>` — confidence threshold in `[0, 1]`. Default `0.8`.
+- `--clone-threshold <n>` — confidence threshold in `[0, 1]`. Default `0.6`.
   Below threshold, Clone hands control back to you.
 - `--clone-agent "<label>"` — advanced; agent label sent to Clone.
 

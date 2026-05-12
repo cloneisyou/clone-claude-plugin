@@ -178,7 +178,7 @@ async function clonePredictNextPrompt({ agent, agentInput, threshold, sessionId 
     agent,
     agent_input: agentInput,
     k: 1,
-    threshold: Number(threshold || '0.8'),
+    threshold: Number(threshold || '0.6'),
   }
   if (sessionId) args.session_id = sessionId
 
@@ -246,7 +246,7 @@ async function main() {
     clone_agent: cloneAgentRaw,
   } = state.frontmatter
 
-  const cloneThreshold = cloneThresholdRaw || '0.8'
+  const cloneThreshold = cloneThresholdRaw || '0.6'
   const cloneAgent = cloneAgentRaw || 'Claude Code Clone Loop'
   const hookSession = hookInput.session_id ? String(hookInput.session_id) : ''
 

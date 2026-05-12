@@ -49,7 +49,7 @@ describe('Clone Loop setup script', () => {
       const state = readFileSync(join(workdir, '.claude', 'clone-loop.local.md'), 'utf8')
       assert.match(state, /launcher smoke test/)
       assert.match(state, /max_iterations: 1/)
-      assert.match(state, /clone_threshold: 0\.8/)
+      assert.match(state, /clone_threshold: 0\.6/)
       assert.doesNotMatch(state, /completion_promise/)
       assert.doesNotMatch(state, /clone_k/)
     } finally {

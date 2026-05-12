@@ -186,7 +186,7 @@ describe('Remote Clone MCP end-to-end flow', () => {
       )
       eventId(response, 'record_agent_response')
 
-      const threshold = 0.8
+      const threshold = 0.6
       const prediction = parseToolBody(
         await toolCall(
           'predict_next_prompt',

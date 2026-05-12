@@ -39,7 +39,7 @@ Start a Clone Loop in your current session.
 
 ```bash
 /clone:loop "Refactor the cache layer" --max-iterations 20
-/clone:loop "Add tests" --clone-threshold 0.8
+/clone:loop "Add tests" --clone-threshold 0.7
 ```
 
 **Options:**
