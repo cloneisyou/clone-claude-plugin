@@ -88,6 +88,49 @@ timelines drop first when the combined size exceeds budget, and long tool
 outputs are summarized head + tail. The original prompt and the freshest
 iteration are never trimmed.
 
+## Why Clone Loop, not just Ralph Loop?
+
+[Ralph Loop](https://ghuntley.com/ralph/) is the well-known baseline:
+when Claude tries to stop, **replay the same prompt**. It works — until
+the right next nudge stops being "do what I just said." Tell Claude to
+*"Build a REST API"* and the second iteration shouldn't re-read your
+spec; it should write tests. The third shouldn't write tests again; it
+should fix the failures it just produced.
+
+Clone Loop replaces the replay with a **prediction**: it asks Clone MCP
+*"what would the user say next, given the conversation so far?"* — and
+only injects that prediction when the model is confident enough. Below
+threshold, control returns to you instead of looping on a stale
+instruction.
+
+```mermaid
+flowchart LR
+  STOP([Claude tries to stop])
+  STOP --> RALPH["Ralph Loop:<br/>replay original prompt"]
+  STOP --> CLONE["Clone Loop:<br/>ask Clone MCP for next prompt"]
+  RALPH --> RC["Claude continues<br/>with the same instruction"]
+  CLONE --> GATE{"Confidence ≥<br/>threshold?"}
+  GATE -- yes --> CC["Inject prediction →<br/>Claude continues with<br/>a fresh, contextual nudge"]
+  GATE -- no --> ESC["Escalate to human"]
+
+  classDef ralph fill:#fff7ed,stroke:#ea580c,color:#111827;
+  classDef clone fill:#ecfdf5,stroke:#059669,color:#064e3b;
+  classDef gate fill:#eff6ff,stroke:#2563eb,color:#1e3a8a;
+  classDef esc fill:#fef2f2,stroke:#dc2626,color:#7f1d1d;
+  class RALPH,RC ralph
+  class CLONE,CC clone
+  class GATE gate
+  class ESC esc
+```
+
+| | Ralph Loop | Clone Loop |
+| --- | --- | --- |
+| Next prompt | Same as the first one | Predicted from the conversation so far |
+| Context sent | None | Original task + every prior user turn + current iteration timeline |
+| Safety gate | Max iterations only | Max iterations **+ confidence threshold** |
+| Failure mode | Pushes stale instructions until N hits | Stops and asks the human when confidence dips |
+| Best fit | Strict retry loops | Iterative work where the next step changes |
+
 ## API key
 
 Token resolution order: `CLONE_API_TOKEN` env var → plugin config
