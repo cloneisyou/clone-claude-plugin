@@ -6,7 +6,7 @@ import { join } from 'node:path'
 const args = process.argv.slice(2)
 const promptParts = []
 let maxIterations = '0'
-let cloneThreshold = '0.8'
+let cloneThreshold = '0.6'
 let cloneAgent = 'Claude Code Clone Loop'
 const ANSI_BOLD = '\u001b[1m'
 const ANSI_PURPLE = '\u001b[35m'
@@ -23,7 +23,7 @@ ARGUMENTS:
 
 OPTIONS:
   --max-iterations <n>       Maximum iterations before auto-stop (default: unlimited)
-  --clone-threshold <n>      Clone auto/escalation threshold in [0, 1] (default: 0.8)
+  --clone-threshold <n>      Clone auto/escalation threshold in [0, 1] (default: 0.6)
   --clone-agent '<text>'     Agent label sent to Clone (default: Claude Code Clone Loop)
   -h, --help                 Show this help message
 

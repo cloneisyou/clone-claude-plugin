@@ -68,7 +68,7 @@ const iterationBlocks = [
 const agentInput = formatConversationHistory({
   promptText,
   iteration: 4,
-  threshold: '0.8',
+  threshold: '0.6',
   injectedUserTurns,
   iterationBlocks,
   windowTurns: HISTORY_WINDOW_TURNS,
@@ -94,7 +94,7 @@ const call = await rpc(token, 'tools/call', {
     agent: 'Claude Code Clone Loop',
     agent_input: agentInput,
     k: 1,
-    threshold: 0.8,
+    threshold: 0.6,
   },
 }, init.sessionId)
 

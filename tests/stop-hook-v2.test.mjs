@@ -29,7 +29,7 @@ function writeState(workdir, overrides = {}) {
     iteration: 1,
     max_iterations: 3,
     session_id: 'session-123',
-    clone_threshold: 0.8,
+    clone_threshold: 0.6,
     clone_agent: 'Claude Code Clone Loop',
     prompt: 'Fix the bug and run tests.',
     ...overrides,
@@ -181,7 +181,7 @@ describe('Clone Loop v2 stop hook', () => {
       {
         id: 'prediction-1',
         status: 'auto',
-        threshold: 0.8,
+        threshold: 0.6,
         predicted_response: 'Commit this and move on.',
         confidence: 0.91,
         reasoning: 'The user usually commits after green tests.',
@@ -210,7 +210,7 @@ describe('Clone Loop v2 stop hook', () => {
         assert.equal(calls[1].params.arguments.agent, 'Claude Code Clone Loop')
         assert.match(calls[1].params.arguments.agent_input, /Fix the bug and run tests/)
         assert.match(calls[1].params.arguments.agent_input, /Tests passed\. What next\?/)
-        assert.equal(calls[1].params.arguments.threshold, 0.8)
+        assert.equal(calls[1].params.arguments.threshold, 0.6)
         assert.equal(calls[1].params.arguments.session_id, 'session-123')
 
         const output = JSON.parse(result.stdout)
@@ -233,7 +233,7 @@ describe('Clone Loop v2 stop hook', () => {
       {
         id: 'prediction-2',
         status: 'escalated',
-        threshold: 0.8,
+        threshold: 0.6,
         predicted_response: 'Maybe run more tests?',
         confidence: 0.42,
         reasoning: 'Not enough matching memory.',
@@ -270,7 +270,7 @@ describe('Clone Loop v2 stop hook', () => {
       {
         id: 'prediction-3',
         status: 'auto',
-        threshold: 0.8,
+        threshold: 0.6,
         predicted_response: 'Run one more check.',
         confidence: 0.9,
         reasoning: 'The user usually verifies before completion.',
@@ -310,7 +310,7 @@ describe('Clone Loop v2 stop hook', () => {
           decision: 'continue',
           iteration: 1,
           confidence: 0.9,
-          threshold: 0.8,
+          threshold: 0.6,
           prediction_id: 'p-1',
           status: 'auto',
           predicted_response: 'Run lint after the tests pass.',
@@ -321,7 +321,7 @@ describe('Clone Loop v2 stop hook', () => {
           decision: 'continue',
           iteration: 2,
           confidence: 0.92,
-          threshold: 0.8,
+          threshold: 0.6,
           prediction_id: 'p-2',
           status: 'auto',
           predicted_response: 'Now open a draft PR with the diff.',
@@ -333,7 +333,7 @@ describe('Clone Loop v2 stop hook', () => {
       {
         id: 'prediction-history-1',
         status: 'auto',
-        threshold: 0.8,
+        threshold: 0.6,
         predicted_response: 'Continue.',
         confidence: 0.9,
         candidates: [],
@@ -365,7 +365,7 @@ describe('Clone Loop v2 stop hook', () => {
         event: 'ask-user-question',
         decision: 'auto-answer-freeform',
         confidence: 0.91,
-        threshold: 0.8,
+        threshold: 0.6,
         answers: { 'Should we open a PR?': 'Yes, open it as a draft.' },
       }) + '\n',
     )
@@ -374,7 +374,7 @@ describe('Clone Loop v2 stop hook', () => {
       {
         id: 'prediction-history-2',
         status: 'auto',
-        threshold: 0.8,
+        threshold: 0.6,
         predicted_response: 'Continue.',
         confidence: 0.9,
         candidates: [],
@@ -404,7 +404,7 @@ describe('Clone Loop v2 stop hook', () => {
           decision: 'continue',
           iteration: index,
           confidence: 0.9,
-          threshold: 0.8,
+          threshold: 0.6,
           prediction_id: `p-${index}`,
           status: 'auto',
           predicted_response: `Predicted prompt number ${index}.`,
@@ -417,7 +417,7 @@ describe('Clone Loop v2 stop hook', () => {
       {
         id: 'prediction-history-3',
         status: 'auto',
-        threshold: 0.8,
+        threshold: 0.6,
         predicted_response: 'Continue.',
         confidence: 0.9,
         candidates: [],
@@ -467,7 +467,7 @@ describe('Clone Loop v2 stop hook', () => {
         decision: 'continue',
         iteration: 2,
         confidence: 0.9,
-        threshold: 0.8,
+        threshold: 0.6,
         prediction_id: 'p-cont',
         status: 'auto',
         predicted_response: 'Run focused tests next.',
@@ -499,7 +499,7 @@ describe('Clone Loop v2 stop hook', () => {
       {
         id: 'prediction-history-4',
         status: 'auto',
-        threshold: 0.8,
+        threshold: 0.6,
         predicted_response: 'Continue.',
         confidence: 0.9,
         candidates: [],
@@ -532,7 +532,7 @@ describe('Clone Loop v2 stop hook', () => {
         decision: 'continue',
         iteration: 2,
         confidence: 0.9,
-        threshold: 0.8,
+        threshold: 0.6,
         prediction_id: 'p-rich',
         status: 'auto',
         predicted_response: 'Make the change.',
@@ -580,7 +580,7 @@ describe('Clone Loop v2 stop hook', () => {
       {
         id: 'prediction-rich',
         status: 'auto',
-        threshold: 0.8,
+        threshold: 0.6,
         predicted_response: 'Continue.',
         confidence: 0.9,
         candidates: [],
@@ -611,7 +611,7 @@ describe('Clone Loop v2 stop hook', () => {
         decision: 'continue',
         iteration: 2,
         confidence: 0.9,
-        threshold: 0.8,
+        threshold: 0.6,
         prediction_id: 'p-summary',
         status: 'auto',
         predicted_response: 'Carry on.',
@@ -645,7 +645,7 @@ describe('Clone Loop v2 stop hook', () => {
       {
         id: 'prediction-summary',
         status: 'auto',
-        threshold: 0.8,
+        threshold: 0.6,
         predicted_response: 'Continue.',
         confidence: 0.9,
         candidates: [],
@@ -680,7 +680,7 @@ describe('Clone Loop v2 stop hook', () => {
         {
           id: 'prediction-5',
           status: 'auto',
-          threshold: 0.8,
+          threshold: 0.6,
           predicted_response: 'Run one more check.',
           confidence: 0.9,
           reasoning: 'The user usually verifies before completion.',
