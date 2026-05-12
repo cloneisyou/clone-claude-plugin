@@ -83,6 +83,13 @@ describe('Clone Claude plugin contract', () => {
     assert.doesNotMatch(loopCommand, /run-plugin-bash/)
   })
 
+  it('exposes a token-gated Clone MCP end-to-end test script', () => {
+    const pkg = JSON.parse(read('package.json'))
+
+    assert.equal(pkg.scripts['test:mcp:e2e'], 'node --test tests/remote-mcp-e2e.test.mjs')
+    assert.equal(existsSync(new URL('tests/remote-mcp-e2e.test.mjs', root)), true)
+  })
+
   it('runs the Stop hook directly through Node', () => {
     const hooks = JSON.parse(read('hooks/hooks.json'))
     const command = hooks.hooks.Stop[0].hooks[0].command
