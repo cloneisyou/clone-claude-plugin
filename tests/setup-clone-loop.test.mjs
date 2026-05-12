@@ -71,6 +71,7 @@ describe('Clone Loop setup script', () => {
             env: {
               ...process.env,
               CLAUDE_PLUGIN_ROOT: pluginRoot,
+              CLONE_LOOP_DISABLE_SESSION: '1',
             },
             encoding: 'utf8',
           },
