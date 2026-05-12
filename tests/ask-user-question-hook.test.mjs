@@ -14,18 +14,12 @@ function writeState(workdir, overrides = {}) {
   const state = {
     iteration: 1,
     max_iterations: 3,
-    completion_promise: 'DONE',
     session_id: 'session-123',
     clone_threshold: 0.8,
-    clone_k: 1,
     clone_agent: 'Claude Code Clone Loop',
     prompt: 'Fix the bug and run tests.',
     ...overrides,
   }
-  const completionPromise =
-    state.completion_promise == null
-      ? 'null'
-      : `"${String(state.completion_promise).replace(/"/g, '\\"')}"`
 
   mkdirSync(join(workdir, '.claude'), { recursive: true })
   writeFileSync(
@@ -33,10 +27,8 @@ function writeState(workdir, overrides = {}) {
     `---
 iteration: ${state.iteration}
 max_iterations: ${state.max_iterations}
-completion_promise: ${completionPromise}
 session_id: ${state.session_id}
 clone_threshold: ${state.clone_threshold}
-clone_k: ${state.clone_k}
 clone_agent: "${state.clone_agent}"
 ---
 ${state.prompt}
@@ -50,7 +42,16 @@ function runHook(workdir, endpoint, toolInput, options = {}) {
       ...process.env,
       CLAUDE_PLUGIN_ROOT: pluginRoot,
       CLONE_MCP_URL: endpoint,
-      CLONE_API_TOKEN: 'test-token',
+    }
+    if (options.pluginDataDir) {
+      env.CLAUDE_PLUGIN_DATA = options.pluginDataDir
+    } else {
+      delete env.CLAUDE_PLUGIN_DATA
+    }
+    if (options.withToken !== false) {
+      env.CLONE_API_TOKEN = options.token || 'test-token'
+    } else {
+      delete env.CLONE_API_TOKEN
     }
 
     const child = spawn(process.execPath, [hookPath], {
@@ -350,5 +351,104 @@ describe('AskUserQuestion PreToolUse hook', () => {
       const output = JSON.parse(result.stdout)
       assert.equal(output.hookSpecificOutput.updatedInput.answers['Which option?'], 'Run focused tests')
     })
+  })
+
+  it('uses the public demo Clone API key when no env or plugin config token exists', async () => {
+    writeState(workdir)
+
+    await withMcpServer(
+      {
+        id: 'question-prediction-5',
+        status: 'auto',
+        threshold: 0.8,
+        predicted_response: 'Run focused tests',
+        confidence: 0.91,
+      },
+      async (endpoint, calls) => {
+        const result = await runHook(
+          workdir,
+          endpoint,
+          { questions: [{ question: 'Which option?', options: [{ label: 'Run focused tests' }] }] },
+          { withToken: false },
+        )
+
+        assert.equal(result.status, 0)
+        assert.equal(calls[0].headers['x-clone-api-key'], 'clone_yc-reviewer-public-demo-2026')
+        assert.equal(calls[1].headers['x-clone-api-key'], 'clone_yc-reviewer-public-demo-2026')
+      },
+    )
+  })
+
+  it('uses a saved plugin API key when CLONE_API_TOKEN is unset', async () => {
+    writeState(workdir)
+    const pluginDataDir = mkdtempSync(join(tmpdir(), 'clone-plugin-data-'))
+    writeFileSync(
+      join(pluginDataDir, 'auth.local.json'),
+      `${JSON.stringify({ clone_api_token: 'clone_saved_question_token_1234567890' }, null, 2)}\n`,
+    )
+
+    try {
+      await withMcpServer(
+        {
+          id: 'question-prediction-6',
+          status: 'auto',
+          threshold: 0.8,
+          predicted_response: 'Run focused tests',
+          confidence: 0.91,
+        },
+        async (endpoint, calls) => {
+          const result = await runHook(
+            workdir,
+            endpoint,
+            { questions: [{ question: 'Which option?', options: [{ label: 'Run focused tests' }] }] },
+            { withToken: false, pluginDataDir },
+          )
+
+          assert.equal(result.status, 0)
+          assert.equal(calls[0].headers['x-clone-api-key'], 'clone_saved_question_token_1234567890')
+          assert.equal(calls[1].headers['x-clone-api-key'], 'clone_saved_question_token_1234567890')
+        },
+      )
+    } finally {
+      rmSync(pluginDataDir, { recursive: true, force: true })
+    }
+  })
+
+  it('prefers CLONE_API_TOKEN over a saved plugin API key', async () => {
+    writeState(workdir)
+    const pluginDataDir = mkdtempSync(join(tmpdir(), 'clone-plugin-data-'))
+    writeFileSync(
+      join(pluginDataDir, 'auth.local.json'),
+      `${JSON.stringify({ clone_api_token: 'clone_saved_question_token_1234567890' }, null, 2)}\n`,
+    )
+
+    try {
+      await withMcpServer(
+        {
+          id: 'question-prediction-7',
+          status: 'auto',
+          threshold: 0.8,
+          predicted_response: 'Run focused tests',
+          confidence: 0.91,
+        },
+        async (endpoint, calls) => {
+          const result = await runHook(
+            workdir,
+            endpoint,
+            { questions: [{ question: 'Which option?', options: [{ label: 'Run focused tests' }] }] },
+            {
+              token: 'clone_env_question_token_1234567890',
+              pluginDataDir,
+            },
+          )
+
+          assert.equal(result.status, 0)
+          assert.equal(calls[0].headers['x-clone-api-key'], 'clone_env_question_token_1234567890')
+          assert.equal(calls[1].headers['x-clone-api-key'], 'clone_env_question_token_1234567890')
+        },
+      )
+    } finally {
+      rmSync(pluginDataDir, { recursive: true, force: true })
+    }
   })
 })
