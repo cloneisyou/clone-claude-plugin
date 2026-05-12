@@ -308,7 +308,7 @@ claude.exe --plugin-dir .
 ```
 
 To pin a frozen version for session-only use, replace `main` with
-`clone-plugin-v0.2.7` for the current release or `clone-plugin-v0.2.6` for the
+`clone-plugin-v0.3.0` for the current release or `clone-plugin-v0.2.7` for the
 previous release.
 
 > [!WARNING]
