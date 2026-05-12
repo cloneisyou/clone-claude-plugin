@@ -32,8 +32,16 @@ function writeState(workdir, overrides = {}) {
     clone_threshold: 0.6,
     clone_agent: 'Claude Code Clone Loop',
     prompt: 'Fix the bug and run tests.',
+    clone_session_id: '',
+    mcp_session_id: '',
+    last_prompt_event_id: '',
     ...overrides,
   }
+
+  const optional = []
+  if (state.clone_session_id) optional.push(`clone_session_id: "${state.clone_session_id}"`)
+  if (state.mcp_session_id) optional.push(`mcp_session_id: "${state.mcp_session_id}"`)
+  if (state.last_prompt_event_id) optional.push(`last_prompt_event_id: "${state.last_prompt_event_id}"`)
 
   mkdirSync(join(workdir, '.claude'), { recursive: true })
   writeFileSync(
@@ -43,7 +51,7 @@ iteration: ${state.iteration}
 max_iterations: ${state.max_iterations}
 session_id: ${state.session_id}
 clone_threshold: ${state.clone_threshold}
-clone_agent: "${state.clone_agent}"
+clone_agent: "${state.clone_agent}"${optional.length ? '\n' + optional.join('\n') : ''}
 ---
 ${state.prompt}
 `,
@@ -202,9 +210,17 @@ describe('Clone Loop v2 stop hook', () => {
             2,
           ),
         )
-        assert.deepEqual(
-          calls.map((call) => call.method),
-          ['initialize', 'tools/call'],
+        const toolCalls = calls.filter((call) => call.method === 'tools/call')
+        const predictCall = toolCalls.find((call) => call.params.name === 'predict_next_prompt')
+        assert.ok(predictCall, 'predict_next_prompt should be called')
+        assert.equal(predictCall.params.arguments.agent, 'Claude Code Clone Loop')
+        assert.match(predictCall.params.arguments.agent_input, /Fix the bug and run tests/)
+        assert.match(predictCall.params.arguments.agent_input, /Tests passed\. What next\?/)
+        assert.equal(predictCall.params.arguments.threshold, 0.8)
+        assert.equal(
+          predictCall.params.arguments.session_id,
+          undefined,
+          'session_id should be absent when no clone_session_id is in state',
         )
         assert.equal(calls[1].params.name, 'predict_next_prompt')
         assert.equal(calls[1].params.arguments.agent, 'Claude Code Clone Loop')
@@ -706,6 +722,179 @@ describe('Clone Loop v2 stop hook', () => {
       )
     } finally {
       rmSync(pluginDataDir, { recursive: true, force: true })
+    }
+  })
+
+  it('records response and prompt and writes last_prompt_event_id when clone_session_id is set and prediction is auto', async () => {
+    writeState(workdir, {
+      clone_session_id: 'clone-session-xyz',
+      mcp_session_id: 'mcp-session-xyz',
+      last_prompt_event_id: 'prompt-event-prev',
+    })
+
+    const calls = []
+    const server = createServer(async (req, res) => {
+      let body = ''
+      req.setEncoding('utf8')
+      for await (const chunk of req) body += chunk
+      const payload = JSON.parse(body)
+      calls.push({ method: payload.method, params: payload.params, headers: req.headers })
+
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'text/event-stream')
+      if (payload.method === 'initialize') {
+        res.setHeader('mcp-session-id', 'mcp-session-xyz')
+        res.end(`data: ${JSON.stringify({ jsonrpc: '2.0', id: payload.id, result: { capabilities: {} } })}\n\n`)
+        return
+      }
+      const toolName = payload.params?.name
+      let textBody
+      if (toolName === 'predict_next_prompt') {
+        textBody = JSON.stringify({
+          id: 'pred-rec-1',
+          status: 'auto',
+          threshold: 0.8,
+          predicted_response: 'Then write a changelog entry.',
+          confidence: 0.95,
+          candidates: [],
+        })
+      } else if (toolName === 'record_agent_prompt') {
+        textBody = JSON.stringify({ event_id: 'prompt-event-new' })
+      } else if (toolName === 'record_agent_response') {
+        textBody = JSON.stringify({ event_id: 'response-event-1' })
+      } else {
+        textBody = JSON.stringify({ ok: true })
+      }
+      res.end(`data: ${JSON.stringify({ jsonrpc: '2.0', id: payload.id, result: { content: [{ type: 'text', text: textBody }] } })}\n\n`)
+    })
+
+    await new Promise((resolveListen) => server.listen(0, '127.0.0.1', resolveListen))
+    const { port } = server.address()
+    try {
+      const result = await runHook(workdir, `http://127.0.0.1:${port}/mcp`)
+      assert.equal(result.status, 0, JSON.stringify({ stdout: result.stdout, stderr: result.stderr, calls }, null, 2))
+
+      const toolCalls = calls.filter((call) => call.method === 'tools/call')
+      const names = toolCalls.map((call) => call.params.name)
+      assert.ok(names.includes('record_agent_response'), `record_agent_response should be called: ${names.join(', ')}`)
+      assert.ok(names.includes('predict_next_prompt'))
+      assert.ok(names.includes('record_agent_prompt'), `record_agent_prompt should be called: ${names.join(', ')}`)
+
+      const responseCall = toolCalls.find((call) => call.params.name === 'record_agent_response')
+      assert.equal(responseCall.params.arguments.session_id, 'clone-session-xyz')
+      assert.equal(responseCall.params.arguments.in_response_to, 'prompt-event-prev')
+
+      const predictCall = toolCalls.find((call) => call.params.name === 'predict_next_prompt')
+      assert.equal(predictCall.params.arguments.session_id, 'clone-session-xyz')
+
+      const promptCall = toolCalls.find((call) => call.params.name === 'record_agent_prompt')
+      assert.equal(promptCall.params.arguments.session_id, 'clone-session-xyz')
+      assert.equal(promptCall.params.arguments.source, 'clone-prediction')
+      assert.equal(promptCall.params.arguments.prompt, 'Then write a changelog entry.')
+
+      const state = readFileSync(join(workdir, '.claude', 'clone-loop.local.md'), 'utf8')
+      assert.match(state, /last_prompt_event_id: "prompt-event-new"/)
+    } finally {
+      await new Promise((resolveClose) => server.close(resolveClose))
+    }
+  })
+
+  it('submits rejected feedback and stops Clone session when confidence is low', async () => {
+    writeState(workdir, {
+      clone_session_id: 'clone-session-low',
+      mcp_session_id: 'mcp-session-low',
+    })
+
+    const calls = []
+    const server = createServer(async (req, res) => {
+      let body = ''
+      req.setEncoding('utf8')
+      for await (const chunk of req) body += chunk
+      const payload = JSON.parse(body)
+      calls.push({ method: payload.method, params: payload.params })
+
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'text/event-stream')
+      if (payload.method === 'initialize') {
+        res.setHeader('mcp-session-id', 'mcp-session-low')
+        res.end(`data: ${JSON.stringify({ jsonrpc: '2.0', id: payload.id, result: { capabilities: {} } })}\n\n`)
+        return
+      }
+      const toolName = payload.params?.name
+      let textBody
+      if (toolName === 'predict_next_prompt') {
+        textBody = JSON.stringify({
+          id: 'pred-low-1',
+          status: 'escalated',
+          threshold: 0.8,
+          predicted_response: 'Maybe try X?',
+          confidence: 0.3,
+          candidates: [],
+        })
+      } else {
+        textBody = JSON.stringify({ ok: true })
+      }
+      res.end(`data: ${JSON.stringify({ jsonrpc: '2.0', id: payload.id, result: { content: [{ type: 'text', text: textBody }] } })}\n\n`)
+    })
+
+    await new Promise((resolveListen) => server.listen(0, '127.0.0.1', resolveListen))
+    const { port } = server.address()
+    try {
+      const result = await runHook(workdir, `http://127.0.0.1:${port}/mcp`)
+      assert.equal(result.status, 0, JSON.stringify({ stdout: result.stdout, stderr: result.stderr }, null, 2))
+
+      const toolNames = calls.filter((call) => call.method === 'tools/call').map((call) => call.params.name)
+      assert.ok(toolNames.includes('submit_feedback'), `submit_feedback should be called: ${toolNames.join(', ')}`)
+      assert.ok(toolNames.includes('stop_session'), `stop_session should be called: ${toolNames.join(', ')}`)
+
+      const feedbackCall = calls.find((call) => call.params?.name === 'submit_feedback')
+      assert.equal(feedbackCall.params.arguments.prediction_id, 'pred-low-1')
+      assert.equal(feedbackCall.params.arguments.status, 'rejected')
+
+      const stopCall = calls.find((call) => call.params?.name === 'stop_session')
+      assert.equal(stopCall.params.arguments.session_id, 'clone-session-low')
+    } finally {
+      await new Promise((resolveClose) => server.close(resolveClose))
+    }
+  })
+
+  it('stops Clone session when max iterations is reached', async () => {
+    writeState(workdir, {
+      iteration: 3,
+      max_iterations: 3,
+      clone_session_id: 'clone-session-max',
+      mcp_session_id: 'mcp-session-max',
+    })
+
+    const calls = []
+    const server = createServer(async (req, res) => {
+      let body = ''
+      req.setEncoding('utf8')
+      for await (const chunk of req) body += chunk
+      const payload = JSON.parse(body)
+      calls.push({ method: payload.method, params: payload.params })
+
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'text/event-stream')
+      if (payload.method === 'initialize') {
+        res.setHeader('mcp-session-id', 'mcp-session-max')
+        res.end(`data: ${JSON.stringify({ jsonrpc: '2.0', id: payload.id, result: { capabilities: {} } })}\n\n`)
+        return
+      }
+      res.end(`data: ${JSON.stringify({ jsonrpc: '2.0', id: payload.id, result: { content: [{ type: 'text', text: '{"ok":true}' }] } })}\n\n`)
+    })
+
+    await new Promise((resolveListen) => server.listen(0, '127.0.0.1', resolveListen))
+    const { port } = server.address()
+    try {
+      const result = await runHook(workdir, `http://127.0.0.1:${port}/mcp`)
+      assert.equal(result.status, 0, JSON.stringify({ stdout: result.stdout, stderr: result.stderr }, null, 2))
+
+      const toolNames = calls.filter((call) => call.method === 'tools/call').map((call) => call.params.name)
+      assert.ok(toolNames.includes('stop_session'), `stop_session should be called on max-iterations: ${toolNames.join(', ')}`)
+      assert.ok(!toolNames.includes('predict_next_prompt'), 'predict_next_prompt should NOT be called on max-iterations')
+    } finally {
+      await new Promise((resolveClose) => server.close(resolveClose))
     }
   })
 })

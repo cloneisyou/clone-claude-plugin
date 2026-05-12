@@ -2,7 +2,6 @@
 
 import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { resolveCloneToken } from '../scripts/clone-auth.mjs'
 import {
   HISTORY_WINDOW_TURNS,
   assistantTextsThisIteration,
@@ -12,6 +11,13 @@ import {
   loadInjectedUserTurns,
   loadIterationBoundaries,
 } from '../scripts/conversation-context.mjs'
+import {
+  clonePredictNextPrompt,
+  recordAgentPrompt,
+  recordAgentResponse,
+  stopCloneSession,
+  submitFeedback,
+} from '../scripts/clone-mcp.mjs'
 
 const LOOP_STATE_FILE = resolve(process.cwd(), '.claude', 'clone-loop.local.md')
 const LOOP_HISTORY_FILE = resolve(process.cwd(), '.claude', 'clone-loop.history.local.jsonl')
@@ -42,7 +48,7 @@ function readStdin() {
 }
 
 function parseJson(input) {
-  const normalized = input.replace(/^\uFEFF/, '').trim()
+  const normalized = input.replace(/^﻿/, '').trim()
   return normalized ? JSON.parse(normalized) : {}
 }
 
@@ -211,7 +217,7 @@ function findLastContinueTs(historyPath) {
     if (!line.trim()) continue
     let record
     try {
-      record = JSON.parse(line.replace(/^\uFEFF/, ''))
+      record = JSON.parse(line.replace(/^﻿/, ''))
     } catch {
       continue
     }
@@ -225,6 +231,110 @@ function findLastContinueTs(historyPath) {
     }
   }
   return lastContinueTs || loopStartTs || ''
+}
+
+function updateFrontmatter(content, key, value) {
+  const escaped = String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  const replacement = `${key}: "${escaped}"`
+  const pattern = new RegExp(`^${key}: .*$`, 'm')
+  if (pattern.test(content)) {
+    return content.replace(pattern, replacement)
+  }
+  return content.replace(/^---\r?\n([\s\S]*?)\r?\n---/, (_, body) => `---\n${body}\n${replacement}\n---`)
+}
+
+async function safeRecordResponse({ cloneSessionId, mcpSessionId, agent, response, inResponseTo, iteration }) {
+  if (!cloneSessionId || !response) return null
+  try {
+    const result = await recordAgentResponse({
+      cloneSessionId,
+      mcpSessionId,
+      agent,
+      response,
+      inResponseTo: inResponseTo || undefined,
+      source: 'integration',
+      sourceDetail: `clone-loop:iteration-${iteration}`,
+    })
+    appendHistory({
+      event: 'record-response',
+      iteration,
+      event_id: result?.eventId || null,
+    })
+    return result
+  } catch (error) {
+    appendHistory({
+      event: 'record-response',
+      iteration,
+      error: error?.message || String(error),
+    })
+    return null
+  }
+}
+
+async function safeRecordPrompt({ cloneSessionId, mcpSessionId, agent, prompt, source, iteration }) {
+  if (!cloneSessionId || !prompt) return null
+  try {
+    const result = await recordAgentPrompt({
+      cloneSessionId,
+      mcpSessionId,
+      agent,
+      prompt,
+      source,
+      sourceDetail: `clone-loop:iteration-${iteration}`,
+    })
+    appendHistory({
+      event: 'record-prompt',
+      iteration,
+      source,
+      event_id: result?.eventId || null,
+    })
+    return result
+  } catch (error) {
+    appendHistory({
+      event: 'record-prompt',
+      iteration,
+      source,
+      error: error?.message || String(error),
+    })
+    return null
+  }
+}
+
+async function safeFeedback({ predictionId, status, mcpSessionId, iteration }) {
+  if (!predictionId) return null
+  try {
+    await submitFeedback({ predictionId, status, mcpSessionId })
+    appendHistory({ event: 'feedback-sent', iteration, prediction_id: predictionId, status })
+  } catch (error) {
+    appendHistory({
+      event: 'feedback-sent',
+      iteration,
+      prediction_id: predictionId,
+      status,
+      error: error?.message || String(error),
+    })
+  }
+  return null
+}
+
+async function safeStopSession({ cloneSessionId, mcpSessionId, iteration, reason }) {
+  if (!cloneSessionId) return
+  try {
+    await stopCloneSession({
+      cloneSessionId,
+      mcpSessionId,
+      sourceDetail: `clone-loop:stop:${reason}`,
+    })
+    appendHistory({ event: 'session-stopped', iteration, reason, clone_session_id: cloneSessionId })
+  } catch (error) {
+    appendHistory({
+      event: 'session-stopped',
+      iteration,
+      reason,
+      clone_session_id: cloneSessionId,
+      error: error?.message || String(error),
+    })
+  }
 }
 
 async function main() {
@@ -244,6 +354,9 @@ async function main() {
     session_id: stateSession,
     clone_threshold: cloneThresholdRaw,
     clone_agent: cloneAgentRaw,
+    clone_session_id: cloneSessionId,
+    mcp_session_id: mcpSessionIdInitial,
+    last_prompt_event_id: lastPromptEventId,
   } = state.frontmatter
 
   const cloneThreshold = cloneThresholdRaw || '0.6'
@@ -271,6 +384,12 @@ async function main() {
       decision: 'max-iterations',
       iteration: Number(iteration),
       max_iterations: Number(maxIterations),
+    })
+    await safeStopSession({
+      cloneSessionId,
+      mcpSessionId: mcpSessionIdInitial,
+      iteration: Number(iteration),
+      reason: 'max-iterations',
     })
     removeState()
     return
@@ -305,6 +424,12 @@ async function main() {
 
   if (!iterationBlocks.length && !assistantTexts.length) {
     console.error('Clone Loop: No assistant messages found; stopping.')
+    await safeStopSession({
+      cloneSessionId,
+      mcpSessionId: mcpSessionIdInitial,
+      iteration: Number(iteration),
+      reason: 'no-assistant-text',
+    })
     removeState()
     return
   }
@@ -312,11 +437,28 @@ async function main() {
   const promptText = state.prompt.trim()
   if (!promptText) {
     console.error('Clone Loop: State file has no prompt text; stopping.')
+    await safeStopSession({
+      cloneSessionId,
+      mcpSessionId: mcpSessionIdInitial,
+      iteration: Number(iteration),
+      reason: 'empty-prompt',
+    })
     removeState()
     return
   }
 
-  const nextIteration = Number(iteration) + 1
+  const currentIteration = Number(iteration)
+  const nextIteration = currentIteration + 1
+
+  await safeRecordResponse({
+    cloneSessionId,
+    mcpSessionId: mcpSessionIdInitial,
+    agent: cloneAgent,
+    response: assistantTexts.join('\n\n'),
+    inResponseTo: lastPromptEventId,
+    iteration: currentIteration,
+  })
+
   writeFileSync(LOOP_STATE_FILE, state.content.replace(/^iteration: .*/m, `iteration: ${nextIteration}`))
 
   const systemMessage = `Clone Loop iteration ${nextIteration}.`
@@ -358,7 +500,8 @@ async function main() {
       agent: cloneAgent,
       agentInput,
       threshold: cloneThreshold,
-      sessionId: hookSession,
+      sessionId: cloneSessionId || undefined,
+      mcpSessionId: mcpSessionIdInitial,
     })
   } catch (error) {
     appendHistory({
@@ -366,6 +509,12 @@ async function main() {
       decision: 'escalate-mcp-error',
       iteration: nextIteration,
       error: error?.message || String(error),
+    })
+    await safeStopSession({
+      cloneSessionId,
+      mcpSessionId: mcpSessionIdInitial,
+      iteration: nextIteration,
+      reason: 'escalate-mcp-error',
     })
     removeState()
     block(`Clone Loop requires human escalation.
@@ -386,6 +535,20 @@ The loop state file has been removed. Tell the user Clone could not produce a sa
       iteration: nextIteration,
       prediction_id: prediction.id || null,
       status: prediction.status || null,
+    })
+    if (prediction.id) {
+      await safeFeedback({
+        predictionId: prediction.id,
+        status: 'rejected',
+        mcpSessionId: mcpSessionIdInitial,
+        iteration: nextIteration,
+      })
+    }
+    await safeStopSession({
+      cloneSessionId,
+      mcpSessionId: mcpSessionIdInitial,
+      iteration: nextIteration,
+      reason: 'escalate-incomplete-prediction',
     })
     removeState()
     block('Clone Loop requires human escalation. Clone MCP returned an incomplete prediction, so the loop state file has been removed. Tell the user Clone was not confident enough and wait for human input.', 'Clone Loop stopped because Clone returned an incomplete prediction.')
@@ -412,6 +575,23 @@ The loop state file has been removed. Tell the user Clone could not produce a sa
       predicted_response: predictedResponse,
     })
 
+    const recorded = await safeRecordPrompt({
+      cloneSessionId,
+      mcpSessionId: mcpSessionIdInitial,
+      agent: cloneAgent,
+      prompt: predictedResponse,
+      source: 'clone-prediction',
+      iteration: nextIteration,
+    })
+    if (recorded?.eventId) {
+      const updated = updateFrontmatter(
+        readFileSync(LOOP_STATE_FILE, 'utf8'),
+        'last_prompt_event_id',
+        recorded.eventId,
+      )
+      writeFileSync(LOOP_STATE_FILE, updated)
+    }
+
     block(`You are continuing a Clone Loop.
 
 ${predictedPromptSection}
@@ -436,6 +616,20 @@ ${predictedPromptSection}`)
     prediction_id: prediction.id || null,
     status: prediction.status || null,
     predicted_response: predictedResponse,
+  })
+  if (prediction.id) {
+    await safeFeedback({
+      predictionId: prediction.id,
+      status: 'rejected',
+      mcpSessionId: mcpSessionIdInitial,
+      iteration: nextIteration,
+    })
+  }
+  await safeStopSession({
+    cloneSessionId,
+    mcpSessionId: mcpSessionIdInitial,
+    iteration: nextIteration,
+    reason: 'escalate-low-confidence',
   })
   removeState()
   const predictedPromptSection = formatPredictedPromptSection({
