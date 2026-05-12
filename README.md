@@ -146,13 +146,13 @@ once the prompt is behaving well.
    cleanup, max iterations, confidence threshold, and MCP failure escalation.
 6. If the loop continues, the hook calls Clone MCP `predict_next_prompt`
    directly with the original prompt (always preserved verbatim), the
-   iteration number and threshold, a chronological multi-turn history of
-   Clone-injected user turns (predicted prompts plus auto-answered
-   `AskUserQuestion` Q/A pairs reconstructed from
-   `.claude/clone-loop.history.local.jsonl`), and every assistant text block
-   emitted during the current iteration (extracted from the transcript via
-   timestamp filtering). The combined history is capped at
-   `HISTORY_WINDOW_TURNS = 20` turns.
+   iteration number and threshold, a chronological history of Clone-injected
+   user turns (predicted prompts plus auto-answered `AskUserQuestion` Q/A
+   pairs reconstructed from `.claude/clone-loop.history.local.jsonl`), and
+   every assistant text block emitted during the current iteration (extracted
+   from the transcript via timestamp filtering). The user-turn history is
+   capped at `HISTORY_WINDOW_TURNS = 20`; the current-iteration assistant
+   block is rendered once at the bottom and is never windowed.
 7. If confidence clears the user-configured threshold, the hook passes the
    prediction payload to Claude. Claude evaluates it in context and continues
    as if the user had provided the predicted prompt.
@@ -165,15 +165,15 @@ The Clone MCP `agent_input` is composed of three sections:
 
 - The original `/clone:loop` prompt (always preserved verbatim, never
   trimmed).
-- A flattened conversation history of Clone-injected user turns and current-
-  iteration assistant text blocks, in chronological order.
-- The current iteration's accumulated assistant text, repeated verbatim at
-  the bottom so the most recent output is never dropped by the cap.
+- A chronological list of Clone-injected user turns — predicted prompts that
+  started each iteration plus any auto-answered `AskUserQuestion` Q/A pairs.
+- The current iteration's accumulated assistant text, joined into a single
+  block at the bottom.
 
-The flattened history is capped at `HISTORY_WINDOW_TURNS = 20` turns. When
-the loop runs longer than that, the oldest turns in the history section roll
-off, but the original prompt and the freshest assistant block remain in
-their dedicated sections. The same context is reused by the AskUserQuestion
+The user-turn history is capped at `HISTORY_WINDOW_TURNS = 20`. When the
+loop runs longer than that, the oldest user turns roll off, but the
+original prompt and the current-iteration assistant block remain in their
+dedicated sections. The same context is reused by the AskUserQuestion
 PreToolUse hook so Clone sees the same conversation when predicting popup
 answers.
 

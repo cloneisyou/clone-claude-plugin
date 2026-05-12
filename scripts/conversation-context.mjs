@@ -157,17 +157,17 @@ function formatTurn(turn) {
   return `### user (${turn.source}):\n${turn.text}`
 }
 
-function formatAssistantTurn(text, iteration) {
-  return `### assistant (iter ${iteration}):\n${text}`
-}
-
 /**
- * Builds the single-string `agent_input` sent to Clone MCP. The original
- * prompt is always preserved in its own section. The conversation history
- * section flattens injected user turns and current-iteration assistant texts
- * in chronological order, then drops the oldest turns until total turn count
- * is at most `windowTurns`. The freshest assistant text is also rendered as
- * the bottom "current iter" block so it is never dropped by the window cap.
+ * Builds the single-string `agent_input` sent to Clone MCP.
+ *
+ * Layout:
+ *   1. "Original Clone Loop prompt" — the 1-turn user prompt, always preserved.
+ *   2. "Conversation history" — the most recent `windowTurns` Clone-injected
+ *      user turns (predictions + auto-answers) in chronological order. Drops
+ *      oldest first if over the cap.
+ *   3. "assistant (current iter N)" — all assistant text emitted during this
+ *      iteration, joined. Rendered exactly once and never windowed so the
+ *      freshest output cannot be lost.
  */
 export function formatConversationHistory({
   promptText,
@@ -186,22 +186,13 @@ export function formatConversationHistory({
     ? Number(windowTurns)
     : HISTORY_WINDOW_TURNS
 
-  // Build chronological list. Injected user turns already carry `ts`. We treat
-  // current-iteration assistant texts as the most recent items by appending
-  // them after all user turns (they happen at "now", after the last
-  // clone-prediction that started this iteration).
-  const items = []
-  for (const turn of safeUserTurns) {
-    items.push({ kind: 'user', formatted: formatTurn(turn) })
-  }
-  for (const text of safeAssistantTexts) {
-    items.push({ kind: 'assistant', formatted: formatAssistantTurn(text, safeIteration) })
-  }
+  const trimmedUserTurns = safeUserTurns.length > cap
+    ? safeUserTurns.slice(safeUserTurns.length - cap)
+    : safeUserTurns
 
-  const trimmed = items.length > cap ? items.slice(items.length - cap) : items
-  const historyBlock = trimmed.length
-    ? trimmed.map((item) => item.formatted).join('\n\n')
-    : '(no prior turns)'
+  const historyBlock = trimmedUserTurns.length
+    ? trimmedUserTurns.map(formatTurn).join('\n\n')
+    : '(no prior user turns)'
 
   const currentAssistantBlock = safeAssistantTexts.length
     ? safeAssistantTexts.join('\n\n')
@@ -213,7 +204,7 @@ ${safePrompt}
 Clone Loop iteration: ${safeIteration}
 Clone threshold: ${safeThreshold}
 
-=== Conversation history (most recent ${cap} turns) ===
+=== Conversation history (most recent ${cap} user turns) ===
 
 ${historyBlock}
 

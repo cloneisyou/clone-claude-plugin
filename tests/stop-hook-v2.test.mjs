@@ -506,18 +506,18 @@ describe('Clone Loop v2 stop hook', () => {
         assert.match(agentInput, /Original Clone Loop prompt:/)
         assert.match(agentInput, /Fix the bug and run tests\./)
 
-        // The current iteration assistant text counts toward the window. With
-        // 30 user turns and 1 assistant turn, the cap of 20 keeps the latest
-        // 19 user turns plus the assistant turn. Predictions 12..30 should
-        // remain; 1..11 should be dropped.
-        for (let index = 12; index <= 30; index += 1) {
+        // The window caps the user-turn history at 20. With 30 user turns the
+        // most recent 20 (predictions 11..30) remain; 1..10 should be dropped.
+        // The current-iter assistant block is rendered separately and is not
+        // subject to the cap.
+        for (let index = 11; index <= 30; index += 1) {
           assert.match(
             agentInput,
             new RegExp(escapeRegExp(`Predicted prompt number ${index}.`)),
             `expected window to keep prediction ${index}`,
           )
         }
-        for (let index = 1; index <= 11; index += 1) {
+        for (let index = 1; index <= 10; index += 1) {
           assert.doesNotMatch(
             agentInput,
             new RegExp(escapeRegExp(`Predicted prompt number ${index}.`)),
@@ -526,7 +526,7 @@ describe('Clone Loop v2 stop hook', () => {
         }
 
         const userMarkers = agentInput.match(/### user \(clone-prediction\):/g) || []
-        assert.equal(userMarkers.length, 19, 'exactly 19 user turns should remain in the window')
+        assert.equal(userMarkers.length, 20, 'exactly 20 user turns should remain in the window')
       },
     )
   })
