@@ -3,6 +3,15 @@
 import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { resolveCloneToken } from '../scripts/clone-auth.mjs'
+import {
+  HISTORY_WINDOW_TURNS,
+  assistantTextsThisIteration,
+  formatConversationHistory,
+  iterationBlocksThisIteration,
+  iterationTimelinesByBoundary,
+  loadInjectedUserTurns,
+  loadIterationBoundaries,
+} from '../scripts/conversation-context.mjs'
 
 const LOOP_STATE_FILE = resolve(process.cwd(), '.claude', 'clone-loop.local.md')
 const LOOP_HISTORY_FILE = resolve(process.cwd(), '.claude', 'clone-loop.history.local.jsonl')
@@ -280,12 +289,94 @@ function formatOptions(options) {
     .join('\n')
 }
 
-function buildQuestionAgentInput({ state, question, questionIndex, questionCount, threshold }) {
-  return `Original Clone Loop prompt:
-${state.prompt.trim()}
+function safeAssistantTextsThisIteration(transcriptPath, sinceTs) {
+  if (!transcriptPath || !existsSync(transcriptPath)) return []
+  try {
+    return assistantTextsThisIteration(transcriptPath, sinceTs)
+  } catch {
+    return []
+  }
+}
 
-Clone Loop iteration: ${state.frontmatter.iteration || 'unknown'}
-Clone threshold: ${threshold}
+function safeIterationBlocksThisIteration(transcriptPath, sinceTs) {
+  if (!transcriptPath || !existsSync(transcriptPath)) return []
+  try {
+    return iterationBlocksThisIteration(transcriptPath, sinceTs)
+  } catch {
+    return []
+  }
+}
+
+function safePriorIterTimelines(transcriptPath, historyPath) {
+  if (!transcriptPath || !existsSync(transcriptPath)) return []
+  try {
+    const boundaries = loadIterationBoundaries(historyPath)
+    const all = iterationTimelinesByBoundary(transcriptPath, boundaries)
+    return all.slice(0, -1)
+  } catch {
+    return []
+  }
+}
+
+function findLastContinueTs(historyPath) {
+  if (!historyPath || !existsSync(historyPath)) return ''
+  let raw
+  try {
+    raw = readFileSync(historyPath, 'utf8')
+  } catch {
+    return ''
+  }
+  let lastContinueTs = ''
+  let loopStartTs = ''
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.trim()) continue
+    let record
+    try {
+      record = JSON.parse(line.replace(/^﻿/, ''))
+    } catch {
+      continue
+    }
+    if (!record || typeof record !== 'object') continue
+    const ts = typeof record.ts === 'string' ? record.ts : ''
+    if (!ts) continue
+    if (record.event === 'stop' && record.decision === 'continue') {
+      if (ts > lastContinueTs) lastContinueTs = ts
+    } else if (record.event === 'loop-start' && !loopStartTs) {
+      loopStartTs = ts
+    }
+  }
+  return lastContinueTs || loopStartTs || ''
+}
+
+function buildQuestionAgentInput({
+  state,
+  question,
+  questionIndex,
+  questionCount,
+  threshold,
+  transcriptPath,
+  historyPath,
+}) {
+  const injectedUserTurns = loadInjectedUserTurns(historyPath)
+  const sinceTs = findLastContinueTs(historyPath)
+  const iterationBlocks = safeIterationBlocksThisIteration(transcriptPath, sinceTs)
+  const assistantTexts = iterationBlocks.length
+    ? []
+    : safeAssistantTextsThisIteration(transcriptPath, sinceTs)
+  const priorIterTimelines = safePriorIterTimelines(transcriptPath, historyPath)
+
+  const conversationContext = formatConversationHistory({
+    promptText: state.prompt,
+    iteration: state.frontmatter.iteration || 'unknown',
+    threshold,
+    injectedUserTurns,
+    assistantTexts,
+    iterationBlocks,
+    priorIterTimelines,
+    windowTurns: HISTORY_WINDOW_TURNS,
+  })
+
+  return `${conversationContext}
 
 Claude called AskUserQuestion during the active Clone Loop.
 Predict the exact natural-language answer this user would give.
@@ -323,6 +414,16 @@ function allowAnswer({ toolInput, answers, confidence, threshold }) {
   )
 }
 
+async function safeReject({ predictionId, mcpSessionId }) {
+  if (!predictionId) return
+  try {
+    await submitFeedback({ predictionId, status: 'rejected', mcpSessionId })
+    appendHistory({ event: 'feedback-sent', source: 'ask-user-question', prediction_id: predictionId, status: 'rejected' })
+  } catch (error) {
+    appendHistory({ event: 'feedback-sent', source: 'ask-user-question', prediction_id: predictionId, status: 'rejected', error: error?.message || String(error) })
+  }
+}
+
 async function main() {
   const hookInput = parseJson(await readStdin())
   if (hookInput.tool_name && hookInput.tool_name !== 'AskUserQuestion') return
@@ -338,6 +439,8 @@ async function main() {
     session_id: stateSession,
     clone_threshold: cloneThresholdRaw,
     clone_agent: cloneAgentRaw,
+    clone_session_id: cloneSessionId,
+    mcp_session_id: mcpSessionIdInitial,
   } = state.frontmatter
 
   const hookSession = hookInput.session_id ? String(hookInput.session_id) : ''
@@ -375,9 +478,12 @@ async function main() {
           questionIndex,
           questionCount: questions.length,
           threshold: cloneThreshold,
+          transcriptPath: hookInput.transcript_path ? String(hookInput.transcript_path) : '',
+          historyPath: LOOP_HISTORY_FILE,
         }),
         threshold: cloneThreshold,
-        sessionId: hookSession,
+        sessionId: cloneSessionId || undefined,
+        mcpSessionId: mcpSessionIdInitial,
       })
     } catch (error) {
       const fallbackAnswer = String(options[0]?.label || '').trim()
@@ -422,6 +528,7 @@ async function main() {
         prediction_id: prediction.id || null,
         status: prediction.status || null,
       })
+      await safeReject({ predictionId: prediction.id, mcpSessionId: mcpSessionIdInitial })
       return
     }
 

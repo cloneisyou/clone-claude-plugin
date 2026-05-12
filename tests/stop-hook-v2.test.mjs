@@ -103,12 +103,18 @@ function runHook(workdir, endpoint, options = {}) {
       resolveRun({ status: null, signal: null, stdout, stderr, error })
     })
 
-    child.stdin.end(
-      JSON.stringify({
-        session_id: 'session-123',
-        last_assistant_message: 'Tests passed. What next?',
-      }),
-    )
+    const stdinPayload = {
+      session_id: options.sessionId || 'session-123',
+    }
+    if (Object.hasOwn(options, 'lastAssistantMessage')) {
+      if (options.lastAssistantMessage) stdinPayload.last_assistant_message = options.lastAssistantMessage
+    } else {
+      stdinPayload.last_assistant_message = 'Tests passed. What next?'
+    }
+    if (options.transcriptPath) {
+      stdinPayload.transcript_path = options.transcriptPath
+    }
+    child.stdin.end(JSON.stringify(stdinPayload))
   })
 }
 
@@ -291,80 +297,374 @@ describe('Clone Loop v2 stop hook', () => {
     )
   })
 
-  it('uses the public demo Clone API key when CLONE_API_TOKEN is blank', async () => {
+  it('injects multi-turn history with previously predicted prompts', async () => {
     writeState(workdir)
+    mkdirSync(join(workdir, '.claude'), { recursive: true })
+    const historyPath = join(workdir, '.claude', 'clone-loop.history.local.jsonl')
+    writeFileSync(
+      historyPath,
+      [
+        JSON.stringify({
+          ts: '2026-01-01T00:00:01Z',
+          event: 'stop',
+          decision: 'continue',
+          iteration: 1,
+          confidence: 0.9,
+          threshold: 0.8,
+          prediction_id: 'p-1',
+          status: 'auto',
+          predicted_response: 'Run lint after the tests pass.',
+        }),
+        JSON.stringify({
+          ts: '2026-01-01T00:00:05Z',
+          event: 'stop',
+          decision: 'continue',
+          iteration: 2,
+          confidence: 0.92,
+          threshold: 0.8,
+          prediction_id: 'p-2',
+          status: 'auto',
+          predicted_response: 'Now open a draft PR with the diff.',
+        }),
+      ].join('\n') + '\n',
+    )
 
     await withMcpServer(
       {
-        id: 'prediction-blank-token',
+        id: 'prediction-history-1',
         status: 'auto',
         threshold: 0.8,
-        predicted_response: 'Run one more check.',
+        predicted_response: 'Continue.',
         confidence: 0.9,
-        reasoning: 'The user usually verifies before completion.',
         candidates: [],
-        k: 1,
-        model: 'test-model',
-        latency_ms: 8,
       },
       async (endpoint, calls) => {
-        const result = await runHook(workdir, endpoint, { cloneApiToken: '   ' })
+        const result = await runHook(workdir, endpoint)
 
-        assert.equal(
-          result.status,
-          0,
-          JSON.stringify(
-            { error: result.error?.message, signal: result.signal, stdout: result.stdout, stderr: result.stderr, calls },
-            null,
-            2,
-          ),
-        )
-        assert.equal(calls[0].headers['x-clone-api-key'], 'clone_yc-reviewer-public-demo-2026')
-        assert.equal(calls[1].headers['x-clone-api-key'], 'clone_yc-reviewer-public-demo-2026')
+        assert.equal(result.status, 0, JSON.stringify({ stdout: result.stdout, stderr: result.stderr }, null, 2))
+        const agentInput = calls[1].params.arguments.agent_input
+        assert.match(agentInput, /Fix the bug and run tests/)
+        assert.match(agentInput, /### user \(clone-prediction\):/)
+        const firstIdx = agentInput.indexOf('Run lint after the tests pass.')
+        const secondIdx = agentInput.indexOf('Now open a draft PR with the diff.')
+        assert.notEqual(firstIdx, -1)
+        assert.notEqual(secondIdx, -1)
+        assert.ok(firstIdx < secondIdx, 'predicted prompts must appear in chronological order')
       },
     )
   })
 
-  it('uses a saved plugin API key when CLONE_API_TOKEN is unset', async () => {
+  it('injects auto-answered questions into history', async () => {
     writeState(workdir)
-    const pluginDataDir = mkdtempSync(join(tmpdir(), 'clone-plugin-data-'))
+    mkdirSync(join(workdir, '.claude'), { recursive: true })
+    const historyPath = join(workdir, '.claude', 'clone-loop.history.local.jsonl')
     writeFileSync(
-      join(pluginDataDir, 'auth.local.json'),
-      `${JSON.stringify({ clone_api_token: 'clone_saved_hook_token_1234567890' }, null, 2)}\n`,
+      historyPath,
+      JSON.stringify({
+        ts: '2026-01-01T00:00:02Z',
+        event: 'ask-user-question',
+        decision: 'auto-answer-freeform',
+        confidence: 0.91,
+        threshold: 0.8,
+        answers: { 'Should we open a PR?': 'Yes, open it as a draft.' },
+      }) + '\n',
     )
 
-    try {
-      await withMcpServer(
-        {
-          id: 'prediction-4',
-          status: 'auto',
-          threshold: 0.8,
-          predicted_response: 'Run one more check.',
-          confidence: 0.9,
-          reasoning: 'The user usually verifies before completion.',
-          candidates: [],
-          k: 1,
-          model: 'test-model',
-          latency_ms: 8,
-        },
-        async (endpoint, calls) => {
-          const result = await runHook(workdir, endpoint, {
-            withToken: false,
-            pluginDataDir,
-          })
+    await withMcpServer(
+      {
+        id: 'prediction-history-2',
+        status: 'auto',
+        threshold: 0.8,
+        predicted_response: 'Continue.',
+        confidence: 0.9,
+        candidates: [],
+      },
+      async (endpoint, calls) => {
+        const result = await runHook(workdir, endpoint)
 
-          assert.equal(
-            result.status,
-            0,
-            JSON.stringify({ stdout: result.stdout, stderr: result.stderr }, null, 2),
-          )
-          assert.equal(calls[0].headers['x-clone-api-key'], 'clone_saved_hook_token_1234567890')
-          assert.equal(calls[1].headers['x-clone-api-key'], 'clone_saved_hook_token_1234567890')
-        },
+        assert.equal(result.status, 0, JSON.stringify({ stdout: result.stdout, stderr: result.stderr }, null, 2))
+        const agentInput = calls[1].params.arguments.agent_input
+        assert.match(agentInput, /### user \(auto-answer\):/)
+        assert.match(agentInput, /Q: Should we open a PR\?/)
+        assert.match(agentInput, /A: Yes, open it as a draft\./)
+      },
+    )
+  })
+
+  it('truncates history to most recent N turns while preserving original prompt', async () => {
+    writeState(workdir)
+    mkdirSync(join(workdir, '.claude'), { recursive: true })
+    const historyPath = join(workdir, '.claude', 'clone-loop.history.local.jsonl')
+    const lines = []
+    for (let index = 1; index <= 30; index += 1) {
+      lines.push(
+        JSON.stringify({
+          ts: `2026-01-01T00:${String(index).padStart(2, '0')}:00Z`,
+          event: 'stop',
+          decision: 'continue',
+          iteration: index,
+          confidence: 0.9,
+          threshold: 0.8,
+          prediction_id: `p-${index}`,
+          status: 'auto',
+          predicted_response: `Predicted prompt number ${index}.`,
+        }),
       )
-    } finally {
-      rmSync(pluginDataDir, { recursive: true, force: true })
     }
+    writeFileSync(historyPath, lines.join('\n') + '\n')
+
+    await withMcpServer(
+      {
+        id: 'prediction-history-3',
+        status: 'auto',
+        threshold: 0.8,
+        predicted_response: 'Continue.',
+        confidence: 0.9,
+        candidates: [],
+      },
+      async (endpoint, calls) => {
+        const result = await runHook(workdir, endpoint)
+
+        assert.equal(result.status, 0, JSON.stringify({ stdout: result.stdout, stderr: result.stderr }, null, 2))
+        const agentInput = calls[1].params.arguments.agent_input
+        assert.match(agentInput, /Original Clone Loop prompt:/)
+        assert.match(agentInput, /Fix the bug and run tests\./)
+
+        // The window caps the user-turn history at 20. With 30 user turns the
+        // most recent 20 (predictions 11..30) remain; 1..10 should be dropped.
+        // The current-iter assistant block is rendered separately and is not
+        // subject to the cap.
+        for (let index = 11; index <= 30; index += 1) {
+          assert.match(
+            agentInput,
+            new RegExp(escapeRegExp(`Predicted prompt number ${index}.`)),
+            `expected window to keep prediction ${index}`,
+          )
+        }
+        for (let index = 1; index <= 10; index += 1) {
+          assert.doesNotMatch(
+            agentInput,
+            new RegExp(escapeRegExp(`Predicted prompt number ${index}.`)),
+            `expected window to drop prediction ${index}`,
+          )
+        }
+
+        const userMarkers = agentInput.match(/### user \(clone-prediction\):/g) || []
+        assert.equal(userMarkers.length, 20, 'exactly 20 user turns should remain in the window')
+      },
+    )
+  })
+
+  it('extracts all assistant texts from current iteration window', async () => {
+    writeState(workdir, { iteration: 2 })
+    mkdirSync(join(workdir, '.claude'), { recursive: true })
+    const historyPath = join(workdir, '.claude', 'clone-loop.history.local.jsonl')
+    writeFileSync(
+      historyPath,
+      JSON.stringify({
+        ts: '2026-01-01T00:00:10Z',
+        event: 'stop',
+        decision: 'continue',
+        iteration: 2,
+        confidence: 0.9,
+        threshold: 0.8,
+        prediction_id: 'p-cont',
+        status: 'auto',
+        predicted_response: 'Run focused tests next.',
+      }) + '\n',
+    )
+
+    const transcriptPath = join(workdir, 'transcript.jsonl')
+    const transcriptLines = [
+      {
+        timestamp: '2026-01-01T00:00:05Z',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'OLD assistant text before continue.' }] },
+      },
+      {
+        timestamp: '2026-01-01T00:00:15Z',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'NEW assistant text alpha.' }] },
+      },
+      {
+        timestamp: '2026-01-01T00:00:20Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'Some user message ignored.' }] },
+      },
+      {
+        timestamp: '2026-01-01T00:00:25Z',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'NEW assistant text beta.' }] },
+      },
+    ]
+    writeFileSync(transcriptPath, transcriptLines.map((line) => JSON.stringify(line)).join('\n') + '\n')
+
+    await withMcpServer(
+      {
+        id: 'prediction-history-4',
+        status: 'auto',
+        threshold: 0.8,
+        predicted_response: 'Continue.',
+        confidence: 0.9,
+        candidates: [],
+      },
+      async (endpoint, calls) => {
+        const result = await runHook(workdir, endpoint, {
+          transcriptPath,
+          lastAssistantMessage: '',
+        })
+
+        assert.equal(result.status, 0, JSON.stringify({ stdout: result.stdout, stderr: result.stderr }, null, 2))
+        const agentInput = calls[1].params.arguments.agent_input
+        assert.match(agentInput, /### assistant \(current iter 3\):/)
+        assert.match(agentInput, /NEW assistant text alpha\./)
+        assert.match(agentInput, /NEW assistant text beta\./)
+        assert.doesNotMatch(agentInput, /OLD assistant text before continue\./)
+      },
+    )
+  })
+
+  it('includes tool_use and tool_result blocks from the current iteration', async () => {
+    writeState(workdir, { iteration: 2 })
+    mkdirSync(join(workdir, '.claude'), { recursive: true })
+    const historyPath = join(workdir, '.claude', 'clone-loop.history.local.jsonl')
+    writeFileSync(
+      historyPath,
+      JSON.stringify({
+        ts: '2026-01-01T00:00:10Z',
+        event: 'stop',
+        decision: 'continue',
+        iteration: 2,
+        confidence: 0.9,
+        threshold: 0.8,
+        prediction_id: 'p-rich',
+        status: 'auto',
+        predicted_response: 'Make the change.',
+      }) + '\n',
+    )
+
+    const transcriptPath = join(workdir, 'transcript.jsonl')
+    const transcriptLines = [
+      {
+        timestamp: '2026-01-01T00:00:15Z',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'I will read the routes file first.' }] },
+      },
+      {
+        timestamp: '2026-01-01T00:00:16Z',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'toolu_1', name: 'Read', input: { file_path: 'src/routes/todos.ts' } }],
+        },
+      },
+      {
+        timestamp: '2026-01-01T00:00:17Z',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'line 1\nline 2\nline 3' }],
+        },
+      },
+      {
+        timestamp: '2026-01-01T00:00:18Z',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'toolu_2', name: 'Bash', input: { command: 'pnpm test' } }],
+        },
+      },
+      {
+        timestamp: '2026-01-01T00:00:19Z',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_2', content: 'tests pass' }],
+        },
+      },
+    ]
+    writeFileSync(transcriptPath, transcriptLines.map((line) => JSON.stringify(line)).join('\n') + '\n')
+
+    await withMcpServer(
+      {
+        id: 'prediction-rich',
+        status: 'auto',
+        threshold: 0.8,
+        predicted_response: 'Continue.',
+        confidence: 0.9,
+        candidates: [],
+      },
+      async (endpoint, calls) => {
+        const result = await runHook(workdir, endpoint, { transcriptPath, lastAssistantMessage: '' })
+
+        assert.equal(result.status, 0, JSON.stringify({ stdout: result.stdout, stderr: result.stderr }, null, 2))
+        const agentInput = calls[1].params.arguments.agent_input
+        assert.match(agentInput, /I will read the routes file first\./)
+        assert.match(agentInput, /\[tool_use\] Read: file_path="src\/routes\/todos\.ts"/)
+        assert.match(agentInput, /\[tool_use\] Bash: command="pnpm test"/)
+        assert.match(agentInput, /\[tool_result Read\]:\nline 1\nline 2\nline 3/)
+        assert.match(agentInput, /\[tool_result Bash\]:\ntests pass/)
+      },
+    )
+  })
+
+  it('summarizes long tool_result content with head and tail', async () => {
+    writeState(workdir, { iteration: 2 })
+    mkdirSync(join(workdir, '.claude'), { recursive: true })
+    const historyPath = join(workdir, '.claude', 'clone-loop.history.local.jsonl')
+    writeFileSync(
+      historyPath,
+      JSON.stringify({
+        ts: '2026-01-01T00:00:10Z',
+        event: 'stop',
+        decision: 'continue',
+        iteration: 2,
+        confidence: 0.9,
+        threshold: 0.8,
+        prediction_id: 'p-summary',
+        status: 'auto',
+        predicted_response: 'Carry on.',
+      }) + '\n',
+    )
+
+    const longLines = []
+    for (let index = 1; index <= 50; index += 1) {
+      longLines.push(`line ${index}`)
+    }
+    const transcriptPath = join(workdir, 'transcript.jsonl')
+    const transcriptLines = [
+      {
+        timestamp: '2026-01-01T00:00:18Z',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'toolu_big', name: 'Bash', input: { command: 'cat big.log' } }],
+        },
+      },
+      {
+        timestamp: '2026-01-01T00:00:19Z',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_big', content: longLines.join('\n') }],
+        },
+      },
+    ]
+    writeFileSync(transcriptPath, transcriptLines.map((line) => JSON.stringify(line)).join('\n') + '\n')
+
+    await withMcpServer(
+      {
+        id: 'prediction-summary',
+        status: 'auto',
+        threshold: 0.8,
+        predicted_response: 'Continue.',
+        confidence: 0.9,
+        candidates: [],
+      },
+      async (endpoint, calls) => {
+        const result = await runHook(workdir, endpoint, { transcriptPath, lastAssistantMessage: '' })
+
+        assert.equal(result.status, 0, JSON.stringify({ stdout: result.stdout, stderr: result.stderr }, null, 2))
+        const agentInput = calls[1].params.arguments.agent_input
+        // Head: first 4 lines kept.
+        assert.match(agentInput, /line 1\nline 2\nline 3\nline 4/)
+        // Tail: last 2 lines kept.
+        assert.match(agentInput, /line 49\nline 50/)
+        // Marker shows how many were dropped.
+        assert.match(agentInput, /\[44 more Bash lines\] \.\.\./)
+        // Middle lines are not present verbatim.
+        assert.doesNotMatch(agentInput, /\nline 25\n/)
+      },
+    )
   })
 
   it('prefers CLONE_API_TOKEN over a saved plugin API key', async () => {
