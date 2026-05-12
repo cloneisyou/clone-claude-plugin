@@ -2,7 +2,6 @@
 
 import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { resolveCloneToken } from '../scripts/clone-auth.mjs'
 import {
   HISTORY_WINDOW_TURNS,
   assistantTextsThisIteration,
@@ -12,6 +11,7 @@ import {
   loadInjectedUserTurns,
   loadIterationBoundaries,
 } from '../scripts/conversation-context.mjs'
+import { clonePredictNextPrompt, submitFeedback } from '../scripts/clone-mcp.mjs'
 
 const LOOP_STATE_FILE = resolve(process.cwd(), '.claude', 'clone-loop.local.md')
 const LOOP_HISTORY_FILE = resolve(process.cwd(), '.claude', 'clone-loop.history.local.jsonl')
