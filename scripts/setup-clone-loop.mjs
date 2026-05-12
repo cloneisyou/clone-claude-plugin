@@ -152,9 +152,10 @@ try {
   )
 } catch {}
 
-console.log(`Clone Loop activated.
+console.log(`${formatIterationPromptLine({ iteration: 1, prompt })}
 
-Iteration: 1
+Clone Loop activated.
+
 Max iterations: ${Number(maxIterations) > 0 ? maxIterations : 'unlimited'}
 Clone threshold: ${cloneThreshold}
 Clone agent: ${cloneAgent}
@@ -163,5 +164,3 @@ The stop hook is active. On each stop, Claude will ask Clone MCP to predict
 the next user prompt and continue only when confidence clears the threshold.
 
 To monitor: head -10 .claude/clone-loop.local.md`)
-
-console.log(`\n${formatIterationPromptLine({ iteration: 1, prompt })}`)
