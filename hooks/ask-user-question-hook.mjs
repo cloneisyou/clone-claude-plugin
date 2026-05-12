@@ -84,6 +84,10 @@ function parseSse(text) {
   return JSON.parse(text)
 }
 
+function cloneApiToken() {
+  return process.env.CLONE_API_TOKEN?.trim() || DEMO_TOKEN
+}
+
 async function rpc(endpoint, token, method, params = {}, sessionId = '') {
   const headers = {
     'Content-Type': 'application/json',
@@ -110,7 +114,7 @@ async function rpc(endpoint, token, method, params = {}, sessionId = '') {
 
 async function clonePredictNextPrompt({ agent, agentInput, k, threshold, sessionId }) {
   const endpoint = process.env.CLONE_MCP_URL || 'https://api.clone.is/mcp'
-  const token = process.env.CLONE_API_TOKEN || DEMO_TOKEN
+  const token = cloneApiToken()
 
   const init = await rpc(endpoint, token, 'initialize', {
     protocolVersion: '2024-11-05',
