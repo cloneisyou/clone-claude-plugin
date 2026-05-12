@@ -71,13 +71,9 @@ To update later: `claude plugin marketplace update clone-labs && claude plugin u
 2. When Claude tries to stop, the Stop hook intercepts.
 3. The hook asks Clone MCP `predict_next_prompt` for what you'd most likely
    say next.
-4. **Above threshold + Clone signals satisfaction** (`stop_recommended`) →
-   loop exits cleanly (Claude's Stop is allowed through). This is the
-   path that fires when Clone predicts a reply like "good. that's the
-   page." or "ship it" — your documented "we're done" voice.
-   **Above threshold, no satisfaction signal** → prediction is injected
-   and Claude continues.
-   **Below threshold** → loop ends and asks for human input.
+4. **Above threshold** → prediction injected, Claude continues.
+   **Above threshold + satisfaction signal** → loop exits, asks for input.
+   **Below threshold** → loop exits, asks for input.
 5. Mid-loop `AskUserQuestion` popups are auto-answered the same way.
 
 ### What Clone actually sees
