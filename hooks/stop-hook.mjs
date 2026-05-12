@@ -415,8 +415,7 @@ The loop state file has been removed. Tell the user Clone could not produce a sa
 
     block(`${predictedPromptSection}
 
-The user-configured confidence threshold was met. The prediction cleared
-confidence ${Number(predictedConfidence).toFixed(5)}. Evaluate
+The user-configured confidence threshold was met. Evaluate
 the prediction in context, then continue as if the user had provided the
 predicted prompt when it is consistent with the current task state.
 Prediction reasoning: ${prediction.reasoning || ''}
@@ -444,13 +443,9 @@ Prediction reasoning: ${prediction.reasoning || ''}
   })
   block(`Clone Loop requires human escalation.
 
-Clone was not confident enough to continue automatically.
-- status: ${prediction.status || ''}
-- confidence: ${Number(predictedConfidence).toFixed(5)}
-- threshold: ${cloneThreshold}
-
 ${predictedPromptSection}
 
+Clone was not confident enough to continue automatically.
 The loop state file has been removed. Tell the user Clone was not confident enough and wait for human input.`, 'Clone Loop stopped because Clone confidence was below threshold.')
 }
 
